@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import sympy as sp
 import csv, os, json
-from axe1 import dichotomie, point_fixe, newton_
+from axe1 import dichotomie, point_fixe, newton_, point_fixe_avec_relaxation, recommander_methode
 
 # ══════════════════════════════════════════════
 #  PALETTE 
@@ -119,7 +119,17 @@ class Axe1Frame(tk.Frame):
         self._build()
 
     def _build(self):
-        # Top bar(Title)
+       
+         #  Initialisation des résultats 
+        self._initialized = False # pour detecter si l utilisateur a entrer des parametres ou pas
+        self._dicho_success  = False
+        self._dicho_sol      = None
+        self._pf_success     = False
+        self._pf_sol         = None
+        self._pf_phi         = None
+        self._newton_success = False
+        self._newton_sol     = None
+         # Top bar(Title)
         top = tk.Frame(self, bg=C["bg"], padx=28, pady=18)
         top.pack(fill="x")
         tk.Label(top, text="Axe 1 — Resolution de fonctions non lineaires",
@@ -192,11 +202,11 @@ class Axe1Frame(tk.Frame):
         row.pack(fill="x")
 
         fields = [
-            ("f(x) =", "e_fx", "x**3 - 2*x - 5", 20),
-            ("x0",     "e_x0", "2.0", 7),
-            ("a", "e_a", "1.0", 5),
-            ("b", "e_b", "3.0", 5),
-            ("Tolerance", "e_tol", "1e-7", 7),
+            ("f(x) =", "e_fx", "", 20),
+            ("x0",     "e_x0", "", 7),
+            ("a", "e_a", "", 5),
+            ("b", "e_b", "", 5),
+            ("Tolerance", "e_tol", "", 7),
         ]
         for lbl, attr, default, w in fields:
             col = tk.Frame(row, bg=C["card"])
@@ -206,6 +216,9 @@ class Axe1Frame(tk.Frame):
             e = mk_entry(col, default, w)
             e.pack(ipady=5)
             setattr(self, attr, e) #stocke les entrees
+
+        for attr in ["e_fx", "e_x0", "e_a", "e_b", "e_tol"]:
+          getattr(self, attr).bind("<KeyRelease>", self._on_input_change)
 
         col_b = tk.Frame(row, bg=C["card"])
         col_b.pack(side="left")
@@ -264,7 +277,10 @@ class Axe1Frame(tk.Frame):
         mk_btn(btns, " Exporter JSON", self._export_json, secondary=True).pack(side="left")
 
         tk.Frame(content, bg=C["bg"], height=20).pack()
-        self._update_rec()
+
+        
+        
+        self._update_rec() 
 
     def _style_ax(self, ax):
         ax.tick_params(colors=C["gray"], labelsize=8)
@@ -280,16 +296,67 @@ class Axe1Frame(tk.Frame):
             brd = C["accent"] if is_sel else C["border"]
             f.configure(bg=bg, highlightbackground=brd)
             for w in f.winfo_children(): w.configure(bg=bg)
-        self._update_rec()
+        
 
     def _update_rec(self):
-        recs = {
-            "Newton": "Newton est conseille si f est derivable et si une bonne valeur initiale est disponible.",
-            "Dichotomie":     "Dichotomie est garantie de converger si f(a)*f(b) < 0. Lente mais fiable.",
-            "Point fixe":     "Point fixe converge si |g'(x)| < 1 au voisinage du point fixe.",
-            
-        }
-        self._rec.configure(text=recs.get(self.algo_var.get(), ""))
+      if not self._initialized:
+        self._rec.configure(text="Veuillez entrer des parametres valides pour obtenir une recommandation.")
+        return
+
+      if not any([self._dicho_success, self._pf_success, self._newton_success]):
+        self._rec.configure(text="Aucune methode applicable sur cet intervalle.")
+        return
+
+      _, message = recommander_methode(
+        self._dicho_success, self._dicho_sol,
+        self._pf_success,    self._pf_sol,    self._pf_phi,
+        self._newton_success, self._newton_sol
+    )
+      self._rec.configure(text=message)
+
+    def _on_input_change(self, event=None):
+      try:
+        
+        f_str = self.e_fx.get().strip().replace('^', '**')
+        a     = float(self.e_a.get())
+        b     = float(self.e_b.get())
+        x0    = float(self.e_x0.get())
+        
+        tol   = float(self.e_tol.get())
+        nmax  = 200
+        self._initialized = True
+
+       
+
+        # Dichotomie
+        ok_d, sol_d, _, _ = dichotomie(f_str, a, b, tol, nmax)
+        self._dicho_success = ok_d
+        self._dicho_sol     = sol_d
+
+        # Point fixe
+        ok_pf, phi, sol_pf, _, _, _ = point_fixe(f_str, a, b, x0, tol, nmax)
+        self._pf_success = ok_pf
+        self._pf_sol     = sol_pf
+        self._pf_phi     = phi
+
+        # Newton
+        ok_n, sol_n, _, _, *_ = newton_(f_str, a, b, x0, tol, nmax) 
+        self._newton_success = ok_n
+        self._newton_sol     = sol_n
+
+      except:
+        self._dicho_success  = False
+        self._dicho_sol      = None
+        self._pf_success     = False
+        self._pf_sol         = None
+        self._pf_phi         = None
+        self._newton_success = False
+        self._newton_sol     = None
+        
+
+      self._update_rec()
+
+
 
     def _run(self):
       algo = self.algo_var.get()
@@ -340,9 +407,27 @@ class Axe1Frame(tk.Frame):
                   f_str, a, b, x0, tol, nmax)
               if not ok:
                   msg = ("Aucune φ(x) stable et contractante trouvée sur [a,b].\n"
-                       "Point fixe non applicable.")
-                  messagebox.showwarning("Point fixe", msg)
-                  return
+                       "Point fixe non applicable.\n" 
+                       "Voulez-vous essayer avec relaxation / Newton ?")
+                  choix=messagebox.askyesno("Point fixe", msg)
+                  if choix:
+                  #Relancer avec la fonction relaxation/newton
+                    ok, phi, sol, iters, erreurs, rapport = point_fixe_avec_relaxation(
+                    f_str, a, b, x0, tol, nmax
+                    )
+
+                    if not ok:
+                      messagebox.showerror(
+                    "Échec",
+                    "Même avec relaxation/Newton, aucune convergence trouvée."
+                )
+                    return
+                  else:
+                    return
+
+
+
+                  
               root_val = sol
               for i, (xn, err) in enumerate(zip(iters, erreurs)):
                   iters_table.append((i, xn, float(f_num(xn)), float(err)))

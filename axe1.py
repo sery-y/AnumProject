@@ -183,6 +183,71 @@ def point_fixe(f_expr, a, b, x0, tol, nmax):
 
     return True, meilleur_phi, x_next, iterations, erreurs,rapport
 
+#point fixe avec relaxation 
+def point_fixe_avec_relaxation(f_expr, a, b, x0, tol, nmax):
+
+    x = sp.Symbol('x')
+    f = sp.sympify(f_expr)
+    f_num = sp.lambdify(x, f, "numpy")
+
+    phi_list = generer_phi_avec_relaxation_et_newton(f,x)
+    meilleur_phi = None
+    meilleur_k = 1
+    rapport = []
+    
+    fa = f_num(a)
+    fb = f_num(b)
+
+    # tvi 
+    if fa * fb > 0:
+        print("f(a) et f(b) ont le même signe")
+        return False,None,None,None,None,None
+    
+
+    # verfier la stablite et la conver des phi genere
+    for phi in phi_list:
+
+        stable = verifier_stabilite(phi, x, a, b)
+        contractante, k = verifier_contractante(phi, x, a, b)
+
+        rapport.append((phi, stable, contractante, k))
+
+        if stable and contractante:
+            if k < meilleur_k:
+                meilleur_k = k
+                meilleur_phi = phi
+
+   #tout les phi non stable ou non contractante j arrte 
+    if meilleur_phi is None:
+         print(" Aucune fonction phi(x) est stable et contractante sur [a,b]")
+         print(" Méthode du point fixe non applicable")
+
+         return False,meilleur_phi,None,None,None,rapport
+
+                
+    #calcule xn+1=phi(xn)
+   
+    phi = sp.lambdify(x, meilleur_phi, "numpy")
+
+    x = x0
+    iterations = []
+    erreurs=[]
+
+    for i in range(nmax):
+
+        x_next = phi(x)
+        erreur = (meilleur_k / (1 - meilleur_k)) * abs(x_next - x)
+
+        erreurs.append(erreur)
+        iterations.append(x_next)
+        
+        if erreur < tol:
+            break
+
+        x = x_next
+
+    return True, meilleur_phi, x_next, iterations, erreurs,rapport
+
 
 # genére phi(x)=x
 def generer_phi(f, x):
@@ -514,3 +579,68 @@ def comparer_methodes(f_expr,newton_iter, pf_iter, dicho_iter,sol_newton, sol_pf
     print("Dichotomie lente mais toujours stable")
 
 
+# Calculer ordre
+def calculer_ordre_point_fixe(phi_expr, solution):
+    
+    x = sp.Symbol('x')
+    phi = sp.sympify(phi_expr)
+
+    dphi  = sp.diff(phi, x)       # φ'(x)
+    ddphi = sp.diff(dphi, x)      # φ''(x)
+
+    val_dphi  = float(dphi.subs(x, solution))   # φ'(α)
+    val_ddphi = float(ddphi.subs(x, solution))  # φ''(α)
+
+    if abs(val_dphi) > 1e-6:
+        return 1, abs(val_dphi)        # ordre 1
+
+    if abs(val_ddphi) > 1e-6:
+        return 2, abs(val_ddphi) / 2  # ordre 2
+
+    return 3, 0.0                      # ordre >= 3
+
+
+
+
+# Recommendation automatique selon l ordre
+def recommander_methode(
+    dicho_success,  dicho_sol,
+    pf_success,     pf_sol,    meilleur_phi,
+    newton_success, newton_sol
+):
+    candidats = []
+
+    if dicho_success:
+        candidats.append(("Dichotomie", 1, 0.5))
+
+    if pf_success and meilleur_phi is not None and pf_sol is not None:
+        ordre, taux = calculer_ordre_point_fixe(meilleur_phi, pf_sol)
+        candidats.append(("Point fixe", ordre, taux))
+
+    if newton_success:
+        candidats.append(("Newton", 2, 0.0))
+
+    if not candidats:
+        return [], "Aucune méthode applicable sur cet intervalle."
+
+    # ordre max
+    ordre_max = max(c[1] for c in candidats)
+    
+    # tous ceux qui ont l'ordre max → recommandes directement, sans comparer le taux
+    recommande = [c[0] for c in candidats if c[1] == ordre_max]
+
+    # message
+    ordre_labels = {1: "linéaire", 2: "quadratique", 3: "cubique+"}
+    lignes = ["Methodes applicables :"]
+
+    for nom, ordre, taux in candidats:
+       
+        lignes.append(f"  • {nom} : ordre {ordre} ({ordre_labels.get(ordre, '?')})")
+
+    lignes.append("")
+    if len(recommande) == 1:
+        lignes.append(f"Recommandation : {recommande[0]}")
+    else:
+        lignes.append(f"Recommandation : {' et '.join(recommande)} (meme ordre de convergence)")
+
+    return recommande, "\n".join(lignes)
