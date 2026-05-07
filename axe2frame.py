@@ -6,173 +6,39 @@ matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import csv, json
+from matplotlib.pylab import eig
 
 from interfacePartagee import C, F, Card, StatCard, mk_entry, mk_btn, configure_treeview_style
-
-
+from directes import choleski, resoudre_choleski, LU, resoudre_LU, gauss, recommander_methodes_directes
+from iteratives import recommander_methodes, analyser_matrice, jacobi, gauss_seidel, visualiser_convergence, visualiser_solution
+from matrices import *
 # ══════════════════════════════════════════════
-#  ALGORITHMES NUMÉRIQUES
+#  ALGORITHMES NUMÉRIQUES DIRECTS
 # ══════════════════════════════════════════════
-
-def _forward_sub(L, b):
-    """Substitution avant pour Ly = b."""
-    n = len(b)
-    y = np.zeros(n)
-    for i in range(n):
-        y[i] = (b[i] - np.dot(L[i, :i], y[:i])) / L[i, i]
-    return y
-
-
-def _back_sub(U, y):
-    """Substitution arrière pour Ux = y."""
-    n = len(y)
-    x = np.zeros(n)
-    for i in range(n - 1, -1, -1):
-        x[i] = (y[i] - np.dot(U[i, i + 1:], x[i + 1:])) / U[i, i]
-    return x
-
-
-def gauss_pivot_partiel(A, b):
-    n = len(b)
-    Ab = np.hstack([A.astype(float), b.reshape(-1, 1).astype(float)])
-    steps = []
-    for k in range(n):
-        max_row = k + np.argmax(np.abs(Ab[k:, k]))
-        if max_row != k:
-            Ab[[k, max_row]] = Ab[[max_row, k]]
-            steps.append(f"Échange lignes {k+1} ↔ {max_row+1}")
-        if abs(Ab[k, k]) < 1e-14:
-            raise ValueError(f"Pivot nul à l'étape {k+1} — système singulier.")
-        for i in range(k + 1, n):
-            factor = Ab[i, k] / Ab[k, k]
-            Ab[i] -= factor * Ab[k]
-            steps.append(f"L{i+1} ← L{i+1} − {factor:.4f}·L{k+1}")
-    x = _back_sub(Ab[:, :n], Ab[:, n])
-    return x, steps
-
-
-def gauss_pivot_total(A, b):
-    n = len(b)
-    Ab = np.hstack([A.astype(float), b.reshape(-1, 1).astype(float)])
-    col_order = list(range(n))
-    steps = []
-    for k in range(n):
-        sub = np.abs(Ab[k:, k:n])
-        ri, ci = np.unravel_index(np.argmax(sub), sub.shape)
-        ri += k; ci += k
-        if ri != k:
-            Ab[[k, ri]] = Ab[[ri, k]]
-            steps.append(f"Échange lignes {k+1} ↔ {ri+1}")
-        if ci != k:
-            Ab[:, [k, ci]] = Ab[:, [ci, k]]
-            col_order[k], col_order[ci] = col_order[ci], col_order[k]
-            steps.append(f"Échange colonnes {k+1} ↔ {ci+1}")
-        if abs(Ab[k, k]) < 1e-14:
-            raise ValueError(f"Pivot nul à l'étape {k+1} — système singulier.")
-        for i in range(k + 1, n):
-            factor = Ab[i, k] / Ab[k, k]
-            Ab[i] -= factor * Ab[k]
-    x_perm = _back_sub(Ab[:, :n], Ab[:, n])
-    x = np.zeros(n)
-    for i, ci in enumerate(col_order):
-        x[ci] = x_perm[i]
-    return x, steps
-
-
 def decomp_lu(A, b):
-    n = len(b)
-    L = np.eye(n)
-    U = A.astype(float).copy()
-    steps = []
-    for k in range(n):
-        if abs(U[k, k]) < 1e-14:
-            raise ValueError("Pivot nul — essayez Gauss avec pivot.")
-        for i in range(k + 1, n):
-            factor = U[i, k] / U[k, k]
-            L[i, k] = factor
-            U[i] -= factor * U[k]
-            steps.append(f"m_{i+1}{k+1} = {factor:.4f}")
-    y = _forward_sub(L, b.astype(float))
-    x = _back_sub(U, y)
-    return x, L, U, steps
-
+    L, U, perm = LU(A, b)
+    if L is None or U is None:
+        return None, None, None
+    b_perm = b[perm]  # ← CRUCIAL : appliquer la permutation sur b
+    x = resoudre_LU(L, U, b_perm)
+    if x is None:
+        return None, L, U
+    return np.asarray(x, dtype=float), L, U
 
 def decomp_cholesky(A, b):
-    n = len(b)
-    A = A.astype(float)
-    L = np.zeros((n, n))
-    steps = []
-    for j in range(n):
-        sum_sq = np.dot(L[j, :j], L[j, :j])
-        val = A[j, j] - sum_sq
-        if val <= 0:
-            raise ValueError(
-                f"Matrice non définie positive (valeur négative à ({j+1},{j+1})).")
-        L[j, j] = np.sqrt(val)
-        steps.append(f"L[{j+1},{j+1}] = √{val:.4f} = {L[j,j]:.4f}")
-        for i in range(j + 1, n):
-            L[i, j] = (A[i, j] - np.dot(L[i, :j], L[j, :j])) / L[j, j]
-            steps.append(f"L[{i+1},{j+1}] = {L[i,j]:.4f}")
-    y = _forward_sub(L, b.astype(float))
-    x = _back_sub(L.T, y)
-    return x, L, steps
+    L = choleski(A)
+
+    if L is None:
+        return None, None
+
+    x = resoudre_choleski(L, b)
+
+    if x is None:
+        return None, L
+
+    return np.asarray(x, dtype=float), L
 
 
-def jacobi(A, b, x0, tol, nmax):
-    n = len(b)
-    D = np.diag(A)
-    if np.any(np.abs(D) < 1e-14):
-        raise ValueError("Zéro sur la diagonale — réordonnez le système.")
-    R = A - np.diag(D)
-    x = x0.copy().astype(float)
-    iters, errors = [], []
-    for k in range(nmax):
-        x_new = (b - R @ x) / D
-        err = np.linalg.norm(x_new - x, np.inf)
-        iters.append(x_new.copy())
-        errors.append(err)
-        x = x_new
-        if err < tol:
-            B = -R / D[:, None]
-            rho = max(abs(np.linalg.eigvals(B)))
-            return True, x, iters, errors, rho
-    B = -R / D[:, None]
-    rho = max(abs(np.linalg.eigvals(B)))
-    return False, x, iters, errors, rho
-
-
-def gauss_seidel(A, b, x0, tol, nmax):
-    n = len(b)
-    x = x0.copy().astype(float)
-    iters, errors = [], []
-    for k in range(nmax):
-        x_new = x.copy()
-        for i in range(n):
-            s = sum(A[i, j] * x_new[j] for j in range(n) if j != i)
-            if abs(A[i, i]) < 1e-14:
-                raise ValueError(f"Zéro sur la diagonale ligne {i+1}.")
-            x_new[i] = (b[i] - s) / A[i, i]
-        err = np.linalg.norm(x_new - x, np.inf)
-        iters.append(x_new.copy())
-        errors.append(err)
-        x = x_new
-        if err < tol:
-            D_L = np.tril(A)
-            U_mat = A - D_L
-            try:
-                B = -np.linalg.inv(D_L) @ U_mat
-                rho = max(abs(np.linalg.eigvals(B)))
-            except Exception:
-                rho = float('nan')
-            return True, x, iters, errors, rho
-    try:
-        D_L = np.tril(A)
-        U_mat = A - D_L
-        B = -np.linalg.inv(D_L) @ U_mat
-        rho = max(abs(np.linalg.eigvals(B)))
-    except Exception:
-        rho = float('nan')
-    return False, x, iters, errors, rho
 
 
 # ══════════════════════════════════════════════
@@ -187,7 +53,6 @@ class Axe2Frame(tk.Frame):
         self._matrix_entries = []
         self._b_entries = []
         self._x0_entries = []
-        
         self._build()
 
     # ──────────────────────────────────────────
@@ -220,7 +85,7 @@ class Axe2Frame(tk.Frame):
         cat_row.pack(fill="x")
         cat_row.columnconfigure((0, 1), weight=1)
 
-        self._cat_var = tk.StringVar(value="Directe") #choisir la methode
+        self._cat_var = tk.StringVar(value="Directe")
         self._cat_frames = {}
         for name, desc, c in [
             ("Directe",   "Gauss, LU, Cholesky",  0),
@@ -249,16 +114,60 @@ class Axe2Frame(tk.Frame):
         self._algo_frames = {}
 
         self._direct_algos = [
-            ("Gauss (pivot partiel)", "Stabilité numérique standard",  0),
-            ("Gauss (pivot total)",   "Stabilité maximale",            1),
-            ("Décomposition LU",      "Réutilisable pour plusieurs b", 2),
-            ("Cholesky",              "Pour matrices SDP uniquement",   3),
+            ("Gauss", "Stabilité numérique standard",  0),
+            ("Décomposition LU",      "Réutilisable pour plusieurs b", 1),
+            ("Cholesky",              "Pour matrices SDP uniquement",   2),
         ]
         self._iter_algos = [
             ("Jacobi",       "Convergence si diag. dominante", 0),
             ("Gauss-Seidel", "Convergence plus rapide",        1),
         ]
         self._sel_cat("Directe")
+
+        # ── Analyse de la matrice ──
+        ana_card = Card(self._content, "Analyse de la matrice A")
+        ana_card.pack(fill="x", **p)
+        ana_body = ana_card.body
+
+        # Bouton analyse
+        btn_ana_row = tk.Frame(ana_body, bg=C["card"])
+        btn_ana_row.pack(fill="x", pady=(0, 6))
+        mk_btn(btn_ana_row, " Analyser la matrice", self._analyse_matrix,
+               secondary=True).pack(side="left")
+
+        # Ligne des indicateurs
+        ind_row = tk.Frame(ana_body, bg=C["card"])
+        ind_row.pack(fill="x")
+        self._ind_labels = {}
+        for col, (key, label) in enumerate([
+            ("DDS",              "Diag. dominante"),
+            ("Symétrique",       "Symétrique"),
+            ("Définie positive", "Déf. positive"),
+        ]):
+            f = tk.Frame(ind_row, bg=C["card2"],
+                         highlightthickness=1, highlightbackground=C["border"],
+                         padx=10, pady=8)
+            f.grid(row=0, column=col, padx=4, pady=4, sticky="ew")
+            ind_row.columnconfigure(col, weight=1)
+            tk.Label(f, text=label, font=F["small"],
+                     bg=C["card2"], fg=C["gray"]).pack(anchor="w")
+            lbl = tk.Label(f, text="—", font=F["h3"],
+                           bg=C["card2"], fg=C["muted"])
+            lbl.pack(anchor="w")
+            self._ind_labels[key] = lbl
+
+        # Stats supplémentaires sur une ligne
+        extra_row = tk.Frame(ana_body, bg=C["card"])
+        extra_row.pack(fill="x", pady=(6, 0))
+        self._lbl_det   = tk.Label(extra_row, text="det(A) = —",
+                                   font=F["mono"], bg=C["card"], fg=C["gray"])
+        self._lbl_det.pack(side="left", padx=(0, 20))
+        self._lbl_cond  = tk.Label(extra_row, text="cond(A) = —",
+                                   font=F["mono"], bg=C["card"], fg=C["gray"])
+        self._lbl_cond.pack(side="left", padx=(0, 20))
+        self._lbl_rho_a = tk.Label(extra_row, text="ρ(A) = —",
+                                   font=F["mono"], bg=C["card"], fg=C["gray"])
+        self._lbl_rho_a.pack(side="left")
 
         # ── Recommandation ──
         rec = tk.Frame(self._content, bg=C["teal_bg"],
@@ -300,9 +209,10 @@ class Axe2Frame(tk.Frame):
         self._iter_param_card = Card(self._content, "Paramètres itératifs")
         iter_row = tk.Frame(self._iter_param_card.body, bg=C["card"])
         iter_row.pack(fill="x")
+
         for lbl, attr, default, width in [
-            ("Tolérance", "e_tol",  "1e-6", 10),
-            
+            ("Tolérance",    "e_tol",  "1e-6", 10),
+            ("Itér. max",    "e_nmax", "100",  8),
         ]:
             col = tk.Frame(iter_row, bg=C["card"])
             col.pack(side="left", padx=(0, 12))
@@ -338,7 +248,7 @@ class Axe2Frame(tk.Frame):
                 w.bind("<Button-1>", lambda e, v=val: self._sel_norm(v))
             self._norm_frames[val] = f
         self._sel_norm(2)
- 
+
         self._x0_frame = tk.Frame(self._iter_param_card.body, bg=C["card"])
         self._x0_frame.pack(fill="x", pady=(8, 0))
         tk.Label(self._x0_frame, text="Point de départ x₀ :",
@@ -346,7 +256,6 @@ class Axe2Frame(tk.Frame):
         self._x0_entries = []
         self._rebuild_x0()
         self._iter_param_card.pack_forget()
- 
 
         # ── Boutons ──
         btn_row = tk.Frame(self._content, bg=C["bg"], padx=28, pady=4)
@@ -376,21 +285,21 @@ class Axe2Frame(tk.Frame):
         tk.Label(self._sol_frame, text="—", font=F["mono"],
                  bg=C["card"], fg=C["gray"]).pack(anchor="w")
 
-        # ── Graphe convergence ──
-        gc = Card(self._content, "Convergence des erreurs")
-        gc.pack(fill="x", **p)
-        self._fig, self._ax = plt.subplots(figsize=(9, 2.8), facecolor=C["card"])
-        self._ax.set_facecolor(C["bg"])
-        self._style_ax(self._ax)
-        self._canvas = FigureCanvasTkAgg(self._fig, gc.body)
-        self._canvas.get_tk_widget().pack(fill="both")
-
+       
         # ── Tableau ──
         tc = Card(self._content, "Détail des étapes / itérations")
         tc.pack(fill="x", **p)
         configure_treeview_style()
         self._tree_frame = tc.body
         self._tree = None
+
+        # ── Info matrice d'itération ──
+        self._iter_info_card = Card(self._content, "Matrice d'itération & convergence")
+        self._iter_info_frame = tk.Frame(self._iter_info_card.body, bg=C["card"])
+        self._iter_info_frame.pack(fill="x")
+        tk.Label(self._iter_info_frame, text="—", font=F["mono"],
+                 bg=C["card"], fg=C["gray"]).pack(anchor="w")
+        self._iter_info_card.pack_forget()
 
         btns = tk.Frame(tc.body, bg=C["card"], pady=8)
         btns.pack(fill="x")
@@ -405,9 +314,9 @@ class Axe2Frame(tk.Frame):
         for sp_ in ax.spines.values():
             sp_.set_edgecolor(C["border"])
         ax.set_xlabel("Itération", color=C["gray"], fontsize=9)
-        ax.set_ylabel("Erreur (‖·‖∞)", color=C["gray"], fontsize=9)
+        ax.set_ylabel("Erreur estimée", color=C["gray"], fontsize=9)
 
-    def _sel_cat(self, name): #changer le style du card categorie selectionné et selectionner le 1 er algo apr defaut
+    def _sel_cat(self, name):
         self._cat_var.set(name)
         for n, f in self._cat_frames.items():
             is_sel = (n == name)
@@ -444,13 +353,13 @@ class Axe2Frame(tk.Frame):
         self._sel_algo(default)
 
         if not hasattr(self, '_iter_param_card'):
-            return   
+            return
         if name == "Itérative":
-            self._iter_param_card.pack(fill="x", padx=28, pady=8)
+            self._iter_param_card.pack(fill="x", padx=28, pady=8, after=self._mat_card)
         else:
             self._iter_param_card.pack_forget()
 
-    def _sel_algo(self, name): #changer le style du algo selectionné
+    def _sel_algo(self, name):
         self._algo_var.set(name)
         for n, f in self._algo_frames.items():
             is_sel = (n == name)
@@ -458,14 +367,22 @@ class Axe2Frame(tk.Frame):
             brd = C["accent"] if is_sel else C["border"]
             f.configure(bg=bg, highlightbackground=brd)
             for w in f.winfo_children():
-                w.configure(bg=bg)  
-    def _sel_norm(self, name): 
-        self._norm_var.set(name)
-        
+                w.configure(bg=bg)
+
+    def _sel_norm(self, val):
+        self._norm_var.set(val)
+        for v, f in self._norm_frames.items():
+            is_sel = (v == val)
+            bg  = C["acc_bg"] if is_sel else C["card2"]
+            brd = C["accent"] if is_sel else C["border"]
+            f.configure(bg=bg, highlightbackground=brd)
+            for w in f.winfo_children():
+                w.configure(bg=bg)
+
     def _rebuild_matrix(self):
         self._n = self._n_var.get()
         for w in self._mat_body.winfo_children():
-            w.destroy() #supp l ancienne matrice
+            w.destroy()
 
         header = tk.Frame(self._mat_body, bg=C["card"])
         header.pack(fill="x", pady=(0, 6))
@@ -479,12 +396,12 @@ class Axe2Frame(tk.Frame):
 
         self._matrix_entries = []
         self._b_entries = []
-        for i in range(self._n): #creer les lignes de la matrice
+        for i in range(self._n):
             row_f = tk.Frame(self._mat_body, bg=C["card"])
             row_f.pack(fill="x", pady=2)
             row_ents = []
-            for j in range(self._n): #creer l entree pour chaque case
-                e = mk_entry(row_f, "1" if i == j else "0", 8) #mat identite par defaut
+            for j in range(self._n):
+                e = mk_entry(row_f, "1" if i == j else "0", 8)
                 e.grid(row=0, column=j, padx=2)
                 row_ents.append(e)
             self._matrix_entries.append(row_ents)
@@ -498,9 +415,9 @@ class Axe2Frame(tk.Frame):
 
     def _rebuild_x0(self):
         if not hasattr(self, '_x0_frame'):
-            return   
+            return
         for w in self._x0_frame.winfo_children():
-            if isinstance(w, tk.Entry): #prends seulement enteries du frame x0
+            if isinstance(w, tk.Entry):
                 w.destroy()
         self._x0_entries = []
         for i in range(self._n):
@@ -508,7 +425,7 @@ class Axe2Frame(tk.Frame):
             e.pack(side="left", padx=3)
             self._x0_entries.append(e)
 
-    def _reset_matrix(self): #initialise la matrice a identite
+    def _reset_matrix(self):
         for i in range(self._n):
             for j in range(self._n):
                 self._matrix_entries[i][j].delete(0, "end")
@@ -527,6 +444,47 @@ class Axe2Frame(tk.Frame):
         return A, b
 
     # ──────────────────────────────────────────
+    def _analyse_matrix(self):
+      try:
+        A, _ = self._read_matrix()
+      except ValueError as e:
+        messagebox.showerror("Erreur de saisie", str(e))
+        return
+
+      info = analyser_matrice(A)
+
+      for key, lbl in self._ind_labels.items(): #affiche les info de dds symetrique DP
+        val = info.get(key, False)
+        lbl.configure(
+            text=" Oui" if val else " Non",
+            fg=C["teal"] if val else C["muted"]
+        )
+
+      det_val = determinant(A)
+      self._lbl_det.configure(text=f"det(A) = {det_val:.4e}")
+
+      cond_val = conditionnement(A, "1")
+      self._lbl_cond.configure(
+        text=f"cond₁(A) = {cond_val:.4e}" if cond_val is not None else "cond(A) = ∞ (singulière)"
+    )
+
+    
+      try:
+        rho_a = rayon_spectral(A)
+        if np.isfinite(rho_a):
+            self._lbl_rho_a.configure(text=f"ρ(A) = {rho_a:.4f}")
+        else:
+            self._lbl_rho_a.configure(text="ρ(A) = ∞")
+      except Exception:
+        self._lbl_rho_a.configure(text="ρ(A) = indéfini")
+
+      cat = self._cat_var.get()
+      if cat == "Directe":
+        recs = recommander_methodes_directes(A)
+      else:
+        recs = recommander_methodes(A)
+      self._rec.configure(text=" • " + "\n • ".join(recs))
+    # ──────────────────────────────────────────
     def _run2(self):
         algo = self._algo_var.get()
         cat  = self._cat_var.get()
@@ -543,58 +501,96 @@ class Axe2Frame(tk.Frame):
         rho_val = None
         converged = True
         L_mat = U_mat = None
+        iter_matrix = None   # matrice d'itération (Jacobi ou GS)
+        M_norm_val = None
 
         try:
-            if algo == "Gauss (pivot partiel)":
-                x_sol, steps_or_iters = gauss_pivot_partiel(A, b)
-            elif algo == "Gauss (pivot total)":
-                x_sol, steps_or_iters = gauss_pivot_total(A, b)
+            if algo == "Gauss":
+                histA, histb, x_sol, steps_or_iters = gauss(A, b)
+
+                if x_sol is None:
+                  messagebox.showerror("Erreur", "Système non résolu")
+                  return
+
             elif algo == "Décomposition LU":
-                x_sol, L_mat, U_mat, steps_or_iters = decomp_lu(A, b)
+                x_sol, L_mat, U_mat = decomp_lu(A, b)
+
             elif algo == "Cholesky":
-                if not np.allclose(A, A.T):
-                    if messagebox.askyesno("Cholesky",
-                            "La matrice n'est pas symétrique.\n"
-                            "Utiliser A' = (A + Aᵀ)/2 ?"):
-                        A = (A + A.T) / 2
-                    else:
-                        return
-                x_sol, L_mat, steps_or_iters = decomp_cholesky(A, b)
+                x_sol, L_mat = decomp_cholesky(A, b)
+                if x_sol is None:
+                  messagebox.showerror(
+                  "Cholesky",
+                  "La matrice n'est pas symétrique définie positive."
+                                       )
+                  return
+                  
+                
+
             elif algo == "Jacobi":
-                tol  = float(self.e_tol.get())
-                nmax = int(self.e_nmax.get())
-                x0   = np.array([float(e.get()) for e in self._x0_entries])
-                converged, x_sol, steps_or_iters, errors, rho_val = \
-                    jacobi(A, b, x0, tol, nmax)
+                tol      = float(self.e_tol.get())
+                nmax     = int(self.e_nmax.get())
+                norm_type = self._norm_var.get()
+                x0       = np.array([float(e.get()) for e in self._x0_entries])
+                converged, x_sol, steps_or_iters, errors, rho_val, iter_matrix, M_norm_val = \
+                    jacobi(A, b, x0, tol, nmax, norm_type)
+                
                 if not converged:
                     messagebox.showwarning("Jacobi",
                         f"Pas de convergence en {nmax} itérations.\n"
-                        f"Rayon spectral ρ ≈ {rho_val:.4f} (> 1 → diverge).")
+                        f"Rayon spectral ρ ≈ {rho_val:.4f} (> 1).")
+                    
+                visualiser_convergence(steps_or_iters, "Jacobi")
+                visualiser_solution(steps_or_iters, b, A, "Jacobi")
+
+                if not converged:
+                    return
+
             elif algo == "Gauss-Seidel":
-                tol  = float(self.e_tol.get())
-                nmax = int(self.e_nmax.get())
-                x0   = np.array([float(e.get()) for e in self._x0_entries])
-                converged, x_sol, steps_or_iters, errors, rho_val = \
-                    gauss_seidel(A, b, x0, tol, nmax)
+                tol      = float(self.e_tol.get())
+                nmax     = int(self.e_nmax.get())
+                norm_type = self._norm_var.get()
+                x0       = np.array([float(e.get()) for e in self._x0_entries])
+                converged, x_sol, steps_or_iters, errors, rho_val, iter_matrix, M_norm_val = \
+                    gauss_seidel(A, b, x0, tol, nmax, norm_type)
                 if not converged:
                     messagebox.showwarning("Gauss-Seidel",
                         f"Pas de convergence en {nmax} itérations.\n"
-                        f"Rayon spectral ρ ≈ {rho_val:.4f} (> 1 → diverge).")
-        except ValueError as e:
-            messagebox.showerror("Erreur", str(e))
-            return
+                        f"Rayon spectral ρ ≈ {rho_val:.4f} (> 1 ).")
+                    
+                
+                visualiser_convergence(steps_or_iters, "Gauss-Seidel")
+                visualiser_solution(steps_or_iters, b, A, "Gauss-Seidel")
+
+                if not converged:
+                    return
+
+        except Exception as e:          
+          messagebox.showerror("Erreur", f"{type(e).__name__}: {e}")
+          import traceback
+          traceback.print_exc()      
+          return
 
         # ── Stats ──
+        if x_sol is None:
+          messagebox.showerror("Erreur", "Aucune solution disponible")
+          return
+
+        x_sol = np.asarray(x_sol, dtype=float)
+
+        if x_sol.ndim == 0:
+          x_sol = np.array([x_sol])
+
         residual = np.linalg.norm(A @ x_sol - b)
         self.st_norm.set(f"{residual:.2e}")
         if cat == "Itérative":
             self.st_iter.set(str(len(steps_or_iters)))
             self.st_rho.set(f"{rho_val:.4f}" if rho_val is not None else "—")
-            self.st_conv.set("✓ Oui" if converged else "✗ Non")
+            self.st_conv.set("Oui" if converged else " Non")
         else:
+            self.st_norm.set("—")
             self.st_iter.set(f"{len(steps_or_iters)} ops")
             self.st_rho.set("—")
-            self.st_conv.set("✓ Direct")
+            self.st_conv.set("—")
 
         # ── Vecteur solution ──
         for w in self._sol_frame.winfo_children():
@@ -611,33 +607,15 @@ class Axe2Frame(tk.Frame):
         if L_mat is not None:
             self._show_matrix_popup(algo, L_mat, U_mat)
 
-        # ── Graphe ──
-        self._ax.cla()
-        self._style_ax(self._ax)
-        if cat == "Itérative" and errors:
-            self._ax.semilogy(range(len(errors)), errors,
-                              color=C["acc_light"], lw=2, marker="o",
-                              markersize=3, label="Erreur ‖·‖∞")
-            self._ax.axhline(float(self.e_tol.get()),
-                             color=C["teal"], lw=1, ls="--", alpha=0.7,
-                             label=f"tol = {self.e_tol.get()}")
-            self._ax.legend(facecolor=C["card"], edgecolor=C["border"],
-                            labelcolor=C["white"], fontsize=8)
+        # ── Info matrice d'itération ──
+        if iter_matrix is not None: #cas iteratif
+            self._show_iter_info(iter_matrix, rho_val, M_norm_val, algo)
         else:
-            residuals_comp = np.abs(A @ x_sol - b)
-            self._ax.bar(range(len(residuals_comp)), residuals_comp,
-                         color=C["accent"], alpha=0.8)
-            self._ax.set_xlabel("Composante", color=C["gray"], fontsize=9)
-            self._ax.set_ylabel("|Ax−b|ᵢ", color=C["gray"], fontsize=9)
-            self._ax.set_xticks(range(len(residuals_comp)))
-            self._ax.set_xticklabels([f"r{i+1}" for i in range(len(residuals_comp))],
-                                      color=C["gray"], fontsize=8)
-        self._fig.tight_layout(pad=0.8)
-        self._canvas.draw()
+            self._iter_info_card.pack_forget()
 
         self._build_tree(cat, steps_or_iters, errors)
 
-        # ── Export data ──
+        # preparation des donnees pour export 
         self._result_data = {
             "algorithme": algo,
             "solution":   x_sol.tolist(),
@@ -654,6 +632,44 @@ class Axe2Frame(tk.Frame):
                 self._result_data["details"].append({"etape": k, "op": s})
 
     # ──────────────────────────────────────────
+    def _show_iter_info(self, M, rho, M_norm, algo):
+        """Afficher la matrice d'itération et les indicateurs de convergence."""
+        card = self._iter_info_card
+        frame = self._iter_info_frame
+        for w in frame.winfo_children():
+            w.destroy()
+
+        # En-têtes métriques
+        meta_row = tk.Frame(frame, bg=C["card"])
+        meta_row.pack(fill="x", pady=(0, 8))
+
+        conv_color = C["teal"] if rho < 1 else C["muted"]
+        for label, value in [
+            ("Rayon spectral ρ(M)", f"{rho:.6f}"),
+            ("‖M‖ (norme choisie)", f"{M_norm:.6f}" if M_norm else "—"),
+            ("Convergence garantie", " Oui (ρ < 1)" if rho < 1 else " Non (ρ ≥ 1)"),
+        ]:
+            col = tk.Frame(meta_row, bg=C["card2"],
+                           highlightthickness=1, highlightbackground=C["border"],
+                           padx=12, pady=8)
+            col.pack(side="left", padx=(0, 8))
+            tk.Label(col, text=label, font=F["small"],
+                     bg=C["card2"], fg=C["gray"]).pack(anchor="w")
+            color = conv_color if "Convergence" in label else C["acc_light"]
+            tk.Label(col, text=value, font=F["h3"],
+                     bg=C["card2"], fg=color).pack(anchor="w")
+
+        # Matrice d'itération (affichée compactement)
+        tk.Label(frame, text=f"Matrice d'itération M ({algo}) :",
+                 font=F["small"], bg=C["card"], fg=C["gray"]).pack(anchor="w", pady=(4, 2))
+        for row in M:
+            tk.Label(frame,
+                     text="  " + "   ".join(f"{v:10.5f}" for v in row),
+                     font=F["mono"], bg=C["card"], fg=C["white"]).pack(anchor="w")
+
+        card.pack(fill="x", padx=28, pady=8)
+
+    # ──────────────────────────────────────────
     def _build_tree(self, cat, data, errors=None):
         if self._tree:
             self._tree.destroy()
@@ -663,17 +679,16 @@ class Axe2Frame(tk.Frame):
             n = self._n
             cols = ("k",) + tuple(f"x{i+1}" for i in range(n)) + ("err",)
             tree = ttk.Treeview(self._tree_frame, columns=cols,
-                                show="headings", height=6, style="D.Treeview")
+                                show="headings", height=len(data), style="D.Treeview")
             tree.heading("k", text="k")
             tree.column("k", width=45, anchor="center")
             for i in range(n):
                 tree.heading(f"x{i+1}", text=f"x{i+1}")
                 tree.column(f"x{i+1}", width=130, anchor="center")
-            tree.heading("err", text="Erreur ‖·‖∞")
+            tree.heading("err", text="Erreur estimée")
             tree.column("err", width=120, anchor="center")
             for k, xk in enumerate(data):
-                err = errors[k] if errors else (
-                    np.linalg.norm(xk - data[k - 1], np.inf) if k > 0 else float('inf'))
+                err = errors[k] if errors else float('inf')
                 vals = (k,) + tuple(f"{v:.8f}" for v in xk) + (f"{err:.2e}",)
                 tree.insert("", "end", values=vals)
         else:
@@ -685,7 +700,9 @@ class Axe2Frame(tk.Frame):
             tree.heading("operation", text="Opération effectuée")
             tree.column("operation", width=600, anchor="w")
             for k, s in enumerate(data):
-                tree.insert("", "end", values=(k + 1, s))
+                s_clean = str(s).replace('\n', ' ').strip()
+                if s_clean:
+                  tree.insert("", "end", values=(k + 1, s_clean))
 
         tree.pack(fill="x")
         self._tree = tree
@@ -738,7 +755,7 @@ class Axe2Frame(tk.Frame):
             if self._cat_var.get() == "Itérative":
                 w.writerow(["Itération"] +
                             [f"x{i+1}" for i in range(len(self._result_data["solution"]))] +
-                            ["Erreur"])
+                            ["Erreur estimée"])
                 for d in self._result_data["details"]:
                     w.writerow([d["iter"]] +
                                [f"{v:.12f}" for v in d["x"]] +

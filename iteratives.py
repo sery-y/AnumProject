@@ -5,8 +5,7 @@ from matrices import choisir_norme, is_DDS, is_positive_definite, is_symmetric, 
 
 
 
-def jacobi(A,b,x0,max_iter=100,epsilon=1e-6,visualiser=False):
-
+def jacobi(A, b, x0, epsilon, max_iter, type_norme="inf", p_norm=None):
     D=np.diag(np.diag(A))
     E=-np.tril(A,-1)
     F=-np.triu(A,1)
@@ -14,73 +13,50 @@ def jacobi(A,b,x0,max_iter=100,epsilon=1e-6,visualiser=False):
     D_inv=np.diag(1/np.diag(D))
     Js=D_inv @ (E+F)
     c=D_inv @ b
-    
-    type_norme = input("Choisir norme (1 / inf / 2 / p) : ")
-    p_norm= None
-    if type_norme == "p":
-     p_norm = float(input("Entrer la valeur de p : "))
 
     M_norm = choisir_norme(Js, type_norme, p_norm)
-    print("Matrice d'itération Jacobi:\n", Js)
-
     p=rayon_spectral(Js)
-    print("Rayon spectral =", p)
 
-    if p < 1:
-        print("la methode de jacobi converge")
-    else:
-       print("la methode de jacobi ne converge pas ")
+    historique_erreurs = []
+    historique_X = []
+    X = x0.copy()
 
-    X = x0
-    if M_norm < 1:
-      X1 = Js @ X + c
-      err_apriori = np.linalg.norm(X - X1) * (M_norm / (1 - M_norm))
-      print("Estimation derreure  =", err_apriori)
-    else:
-     print("||M|| >= 1 → estimation derreur non applicable")
-    suite_vectorielle=[X.copy()]
+    convergence = False
+    nb_iterations = 0
+
     for i in range(max_iter):
        X_new = Js @ X + c
-       suite_vectorielle.append(X_new.copy())
+       historique_X.append(X_new.copy())
 
-       erreur = np.linalg.norm(A @ X_new - b)
        diff = np.linalg.norm(X_new - X)
+
        if M_norm < 1:
           err_estime = diff * (M_norm / (1 - M_norm))
-          print("Erreur estimée =", err_estime)
+          historique_erreurs.append(err_estime)
+          critere = err_estime
        else:
           err_estime = diff
-          print("Erreur estimée (a posteriori) =", err_estime)
+          critere = diff
 
-       if M_norm < 1:
-        if diff * (M_norm / (1 - M_norm)) < epsilon:
-         print("Convergence")
-         break
-       else:
-        if diff < epsilon:
-         print("Convergence")
-         break
+       if critere < epsilon:
+            convergence = True
+            nb_iterations = i + 1
+            break
 
        X = X_new
-    if visualiser:
-     visualiser_convergence(suite_vectorielle, "Jacobi")
-     visualiser_solution(suite_vectorielle, b, A, "Jacobi")
-    return Js, suite_vectorielle , p
+    if not convergence:
+       nb_iterations = max_iter
 
-def jacobi_console():
+    solution = historique_X[-1]
 
-    n = int(input("Entrer la taille de la matrice A : "))
+    
+     
 
-    A = saisir_matrice(n)
-    b = saisir_vecteur(n, "b")
-    x0 = saisir_vecteur(n, "x0")
+    return convergence, solution, historique_X, historique_erreurs, p, Js, M_norm
 
-    max_iter = int(input("Nombre max d'itérations : "))
-    epsilon = float(input("Tolérance : "))
-    visualiser = input("Voulez-vous voir les graphiques ? (o/n) : ").lower() == 'o'
-    return jacobi(A, b, x0, max_iter, epsilon,visualiser=visualiser)
 
-def gauss_seidel(A, b, x0, max_iter=100, epsilon=1e-6,visualiser=False):
+
+def gauss_seidel(A, b, x0, epsilon, max_iter, type_norme="inf", p_norm=None):
 
     D = np.diag(np.diag(A))
     E = -np.tril(A, -1)
@@ -90,87 +66,67 @@ def gauss_seidel(A, b, x0, max_iter=100, epsilon=1e-6,visualiser=False):
 
     Gs = DE_inv @ F
     c = DE_inv @ b
-    type_norme = input("Choisir norme (1 / inf / 2 / p) : ")
-    p_norm = None
-    if type_norme == "p":
-        p_norm = float(input("Entrer la valeur de p : "))
 
     M_norm = choisir_norme(Gs, type_norme, p_norm)
-    print("Matrice d'itération GS :\n", Gs)
-
     p = rayon_spectral(Gs)
-    print("Rayon spectral =", p)
 
-    if p < 1:
-        print("Gauss-Seidel converge")
-    else:
-        print("Gauss-Seidel ne converge pas")
-    
-    if M_norm < 1:
-     print("Estimation derreur disponible")
-    else:
-     print("||M|| >= 1 → estimation derreur non applicable")
-    X = x0
-    suite_vectorielle = [X.copy()]
+    historique_X = []
+    historique_erreurs = []
+    X = x0.copy()
+    convergence = False
+    nb_iterations = 0
+
 
     for i in range(max_iter):
         X_new = Gs @ X + c
-        suite_vectorielle.append(X_new.copy())
+        historique_X.append(X_new.copy())
 
-        erreur = np.linalg.norm(A @ X_new - b)
         diff = np.linalg.norm(X_new - X)
         if M_norm < 1:
             err_estime = diff * (M_norm / (1 - M_norm))
-            print("Erreur estimée =", err_estime)
+            historique_erreurs.append(err_estime)
+            critere = err_estime
         else:
             err_estime = diff
-            print("Erreur estimée =", err_estime)
+            historique_erreurs.append(err_estime)
+            critere = diff
 
-        if M_norm < 1:
-         if err_estime < epsilon:
-          print("Convergence")
-          break
-        else:
-         if diff < epsilon:
-          print("Convergence")
-          break
+
+        if critere < epsilon:
+            convergence = True
+            nb_iterations = i + 1
+            break
 
         X = X_new
-    if visualiser :
-     visualiser_convergence(suite_vectorielle, "Gauss-Seidel")
-     visualiser_solution(suite_vectorielle, b, A, "Gauss-Seidel")
-    return Gs, suite_vectorielle, p
+    if not convergence:
+        nb_iterations = max_iter
+    solution = historique_X[-1]
+   
+    return convergence, solution, historique_X, historique_erreurs, p, Gs, M_norm
 
-def gauss_seidel_console():
-    n = int(input("Entrer la taille de la matrice A : "))
 
-    A = saisir_matrice(n)
-    b = saisir_vecteur(n, "b")
-    x0 = saisir_vecteur(n, "x0")
 
-    max_iter = int(input("Nombre max d'itérations : "))
-    epsilon = float(input("Tolérance : "))
-    visualiser = input("Voulez-vous voir les graphiques ? (o/n) : ").lower() == 'o'
-    return gauss_seidel(A, b, x0, max_iter, epsilon, visualiser=visualiser)
 
 def analyser_matrice(A):
     res = {}
     res["DDS"] = is_DDS(A)
-    res["symétrique"] = is_symmetric(A)
-    res["définie positive"] = is_positive_definite(A)
+    res["Symétrique"] = is_symmetric(A)
+    res["Définie positive"] = is_positive_definite(A)
     
     return res
 
 def recommander_methodes(A):
     info = analyser_matrice(A)
-    recommandations = []
+    recs = []
     if info["DDS"]:
-        recommandations.append("Jacobi recommandé (matrice DDS → convergence garantie)")
-        recommandations.append("Gauss-Seidel recommandé (matrice DDS → convergence garantie)")
+        recs.append("Jacobi recommandé (matrice DDS → convergence garantie)")
+        recs.append("Gauss-Seidel recommandé (matrice DDS → convergence garantie)")
     
-    if info["symétrique"] and info["définie positive"]:
-        recommandations.append("Gauss-Seidel recommandé (matrice symétrique et définie positive → convergence garantie)")
-    return recommandations , info
+    if info["Symétrique"] and info["Définie positive"]:
+        recs.append("Gauss-Seidel recommandé (matrice symétrique et définie positive → convergence garantie)")
+    if not recs:
+        recs.append("Convergence non garantie — vérifiez le rayon spectral.")
+    return recs 
 
 def afficher_recommandations(A):
     recommandations, info = recommander_methodes(A)
@@ -227,7 +183,7 @@ def visualiser_convergence(suite_iterative, titre="Convergence", methode="Jacobi
     for i in range(len(suite_iterative) - 1):
         err = np.linalg.norm(suite_iterative[i+1] - suite_iterative[i])
         erreurs.append(err)
-    
+    plt.close('all')
     # Créer le graphique
     plt.figure(figsize=(10, 6))
     plt.plot(range(1, len(erreurs)+1), erreurs, 'b-o', linewidth=2, markersize=4)
@@ -241,7 +197,7 @@ def visualiser_convergence(suite_iterative, titre="Convergence", methode="Jacobi
         plt.text(0.7, 0.95, f"Erreur finale: {erreurs[-1]:.2e}", 
                  transform=plt.gca().transAxes, fontsize=10)
     
-    plt.show()
+    plt.show(block=False)
 
 def visualiser_solution(suite_iterative, b, A, titre="Convergence"):
     residus = []
@@ -254,10 +210,5 @@ def visualiser_solution(suite_iterative, b, A, titre="Convergence"):
     plt.title(f"{titre} - Évolution du résidu(erreur)", fontsize=14)
     plt.xlabel("Numéro d'itération", fontsize=12)
     plt.ylabel("||Ax - b||", fontsize=12)
-    plt.show() 
+    plt.show(block=False) 
 
-def get_iterative_methodes():
- return {
-    "jacobi": jacobi_console,
-    "gauss_seidel": gauss_seidel_console
-}

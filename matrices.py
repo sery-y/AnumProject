@@ -102,16 +102,20 @@ def conditionnement(A, norme="1", p=2):
         return None
     
 def choisir_norme(M, type_norme, p=None):
-    if type_norme == "1":
+    if type_norme == "1" or type_norme == 1:
         return norme_1(M)
-    elif type_norme == "inf":
+
+    elif type_norme == "inf" or type_norme == 0:
         return norme_infini(M)
-    elif type_norme == "2":
+
+    elif type_norme == "2" or type_norme == 2:
         return norme_2(M)
+
     elif type_norme == "p":
         if p is None:
             raise ValueError("Vous devez fournir p pour la norme p")
         return norme_p(M, p)
+
     else:
         raise ValueError("Norme inconnue")
     

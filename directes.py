@@ -1,4 +1,5 @@
 import math
+from tkinter import messagebox
 import numpy as np
 import matplotlib.pyplot as plt
 from matrices import is_positive_definite, is_symmetric, saisir_matrice, saisir_vecteur
@@ -51,6 +52,7 @@ def pivot_total(A,b ,k,perm):
     return True
 
 def gauss(A, b):
+
     n = len(A)
     perm = list(range(n))
 
@@ -60,66 +62,87 @@ def gauss(A, b):
     historiques_A = [A.copy()]
     historiques_b = [b.copy()]
 
-    for k in range(n-1):
+    steps = []
 
-        # Gestion pivot nul
-        if A[k][k] == 0:
-           print("Pivot nul détecté à l'étape", k)
-           print("Choisir méthode de pivot :")
-           print("1 - Partiel")
-           print("2 - Total")
+    for k in range(n - 1):
 
-           choix = input("Votre choix : ")
+        steps.append(f"\n===== Étape {k+1} =====")
 
-           if choix == "1":
-            ok = pivot_partiel(A, b, k)
-           else:
-            ok = pivot_total(A, b, k, perm)
-           if not ok:
-                print("Aucune méthode de pivotage n'a pu résoudre le problème.")
-                return historiques_A, historiques_b, None
+        # ===== Gestion pivot nul =====
+        if abs(A[k][k]) < 1e-14:
 
+            steps.append(
+                f"Pivot nul détecté en position ({k+1},{k+1})"
+            )
 
-        #  Élimination
-        for i in range(k+1, n):
+            ret = choix_utilisateur_gauss(k + 1, A, b, k, perm)
+
+            if ret == False:
+                steps.append("Pivot impossible.")
+                return historiques_A, historiques_b, None, steps
+
+            steps.append("Pivot appliqué avec succès.")
+
+        # ===== Élimination =====
+        for i in range(k + 1, n):
+
             m = A[i][k] / A[k][k]
+
+            steps.append(
+                f"m_{i+1}{k+1} = "
+                f"{A[i][k]:.4f} / {A[k][k]:.4f} = {m:.4f}"
+            )
+
             A[i, k:] -= m * A[k, k:]
             b[i] -= m * b[k]
+
+            steps.append(
+                f"L{i+1} ← L{i+1} - ({m:.4f}) × L{k+1}"
+            )
+
+            steps.append(
+                f"Nouvelle ligne {i+1} : {A[i]}"
+            )
+
+            steps.append(
+                f"Nouveau b[{i+1}] = {b[i]:.4f}"
+            )
 
         historiques_A.append(A.copy())
         historiques_b.append(b.copy())
 
-    #  Substitution arrière
+        steps.append(f"Matrice A après étape {k+1} :\n{A}")
+        steps.append(f"Vecteur b après étape {k+1} :\n{b}")
+
+    # ===== Substitution arrière =====
+
     x = np.zeros(n)
 
-    for i in range(n-1, -1, -1):
-        s = sum(A[i][j] * x[j] for j in range(i+1, n))
+    steps.append("\n===== Substitution arrière =====")
+
+    for i in range(n - 1, -1, -1):
+
+        s = sum(A[i][j] * x[j] for j in range(i + 1, n))
+
         x[i] = (b[i] - s) / A[i][i]
 
-    #  Réorganisation si pivot total
+        steps.append(
+            f"x{i+1} = ({b[i]:.4f} - {s:.4f}) / "
+            f"{A[i][i]:.4f} = {x[i]:.4f}"
+        )
+
+    # ===== Réorganisation pivot total =====
+
     x_final = np.zeros(n)
+
     for i in range(n):
         x_final[perm[i]] = x[i]
 
-    return historiques_A, historiques_b, x_final
+    steps.append(f"\nSolution finale : {x_final}")
 
-def gauss_console():
-    n = int(input("Entrer la taille de la matrice A : "))
-    A = saisir_matrice(n)
-    b = saisir_vecteur(n, "b")
-    histA, histB, solution = gauss(A, b)
-    print("\n=== HISTORIQUE DES ÉTAPES ===")
-    for k in range(len(histA)):
-        print(f"\n--- Étape {k} ---")
-        print("Matrice A :")
-        print(histA[k])
-        print("Vecteur b :")
-        print(histB[k])
-    
-    print("\n=== SOLUTION FINALE ===")
-    print("X =", solution)
-    
-    return histA, histB, solution
+    return historiques_A, historiques_b, x_final, steps
+
+
     
 def afficher_matrices(L, U, k):
     print(f"Étape k = {k}")
@@ -128,43 +151,25 @@ def afficher_matrices(L, U, k):
     print("\nMatrice U :")
     print(U)
 
-def LU(A, b):
+def LU(A, b, verbose=False):
     n = len(A)
-
     A = A.astype(float)
+    b = b.astype(float)  # ← travailler sur une copie
     L = np.eye(n)
     perm = list(range(n))
-    U = A.copy()
 
     for k in range(n):
-
-        # ===== PIVOT =====
-        if A[k][k] == 0:
-            if A[k][k] == 0:
-              print("Pivot nul détecté à l'étape", k)
-              print("Choisir méthode de pivot :")
-              print("1 - Partiel")
-              print("2 - Total")
-
-              choix = input("Votre choix : ")
-              
-              if choix == "1":
-               ok = pivot_partiel(A, b, k)
-              else:
-               ok = pivot_total(A, b, k, perm)
-
-              if not ok:
-                print("Pivot impossible")
+        if abs(A[k][k]) < 1e-14:
+            ret = choix_utilisateur_LU(k+1, A, b, k, perm)  # ← passer b
+            if ret == False:
                 return None, None, None
-
-        # ===== ELIMINATION (Gauss) =====
         for i in range(k+1, n):
             m = A[i][k] / A[k][k]
             L[i][k] = m
             A[i, k:] = A[i, k:] - m * A[k, k:]
-
-        afficher_matrices(L, U, k)
-    return L, U, perm
+        if verbose:
+            afficher_matrices(L, A, k)
+    return L, A.copy(), perm  # ← U = copie de A
 
 def resoudre_LU(L, U, b):
     n = len(b)
@@ -249,26 +254,57 @@ def choleski_console():
         return L, x
     
 def recommander_methodes_directes(A):
-    
-    print("\n--- Analyse pour méthodes directes ---")
-
-    if np.linalg.det(A) == 0:
-        print("Matrice non inversible => aucune méthode directe possible")
-        return
-
+    recs = []
+    if abs(np.linalg.det(A)) < 1e-14: # if determinant == 0
+        return ["Matrice non inversible — aucune méthode directe possible."]
     if is_symmetric(A) and is_positive_definite(A):
-        print("Cholesky recommandé (rapide et stable)")
-        return
+        recs.append("Cholesky recommandé (matrice SDP — rapide et stable).")
+    recs.append("Décomposition LU recommandée (cas général).")
+    recs.append("Gauss avec pivot partiel : standard. Pivot total : si instabilité.")
+    return recs
 
-    print("LU recommandé (cas général)")
 
-    print("Gauss avec pivot recommandé")
-    print("   - Pivot partiel : standard")
-    print("   - Pivot total : si instabilité")
 
-def get_direct_methodes():
-    return {
-        "gauss": gauss_console,
-        "lu": LU_console,
-        "cholesky": choleski_console
-    }
+def choix_utilisateur_LU(i, A, b, k, perm):
+    reponse = messagebox.askyesno(
+        "Pivot nul",
+        f"Pivot nul détecté à l'étape {i}.\n\n"
+        "Oui  → Pivot partiel\n"
+        "Non → Pivot total"
+    )
+
+    if reponse:
+        ok = pivot_partiel(A, b, k)
+        
+    else:
+        ok = pivot_total(A, b, k, perm)
+        
+    if not ok:
+        messagebox.showerror(
+            "Erreur",
+            "Pivot impossible."
+        )
+        return False
+    return True   
+
+def choix_utilisateur_gauss(i, A, b, k, perm):
+    reponse = messagebox.askyesno(
+        "Pivot nul",
+        f"Pivot nul détecté à l'étape {i}.\n\n"
+        "Oui  → Pivot partiel\n"
+        "Non → Pivot total"
+    )
+
+    if reponse:
+        ok = pivot_partiel(A, b, k)
+        
+    else:
+        ok = pivot_total(A, b, k, perm)
+        
+    if not ok:
+        messagebox.showerror(
+            "Erreur",
+            "Aucune méthode de pivotage n'a pu résoudre le problème.."
+        )
+        return False
+    return True   
