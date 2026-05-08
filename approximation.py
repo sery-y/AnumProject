@@ -226,7 +226,7 @@ def tracer_interpolations(x_points, y_points, polynomes):
         polynomes : liste de tuples (fonction, nom)
     """
     X = np.linspace(min(x_points), max(x_points), 500)
-
+    plt.close('all')
     plt.figure(figsize=(10, 6))
 
     plt.scatter(
@@ -264,35 +264,88 @@ def tracer_interpolations(x_points, y_points, polynomes):
 
 def tableau_erreurs_interpolation(x_points, y_points, polynomes):
     """
-    Affiche un tableau d'erreurs pour les interpolations.
+    Affiche un tableau d'erreurs pour les interpolations en utilisant plt.table.
     
     Paramètres :
-        x_points  : liste des abscisses
-        y_points  : liste des ordonnées
+        x_points  : liste ou array des abscisses
+        y_points  : liste ou array des ordonnées  
         polynomes : liste de tuples (fonction, nom)
     """
-    print("\n" + "=" * 70)
-    print("TABLEAU DES ERREURS - INTERPOLATION")
-    print("=" * 70)
-
-    header = f"{'x':>8} {'y':>10}"
+    import matplotlib.pyplot as plt
+    
+    x_points = np.array(x_points, dtype=float)
+    y_points = np.array(y_points, dtype=float)
+    
+    # Construction des en-têtes
+    headers = ['x', 'y donné']
     for _, nom in polynomes:
-        header += f" {nom+'(x)':>12} {'Erreur':>12}"
-    print(header)
-    print("-" * 70)
-
+        headers.extend([f'{nom}(x)', '|Erreur|'])
+    
+    # Construction des données du tableau
+    cell_text = []
+    
     for xi, yi in zip(x_points, y_points):
-
-        ligne = f"{xi:8.4f} {yi:10.4f}"
-
+        row = [f'{xi:.4f}', f'{yi:.4f}']
+        
         for P_func, _ in polynomes:
             val = float(P_func(xi))
             err = abs(yi - val)
-            ligne += f" {val:12.4f} {err:12.2e}"
-
-        print(ligne)
-
-    print("=" * 70)
+            row.extend([f'{val:.4f}', f'{err:.2e}'])
+        
+        cell_text.append(row)
+    
+    # Création de la figure (taille adaptée au nombre de données)
+    n_rows = len(x_points)
+    n_cols = len(headers)
+    
+    fig, ax = plt.subplots(
+        figsize=(max(10, 2.5 * len(polynomes) + 2), max(4, 0.4 * n_rows + 1)),
+        facecolor='#1a1a1a'  # Fond sombre pour cohérence avec l'interface
+    )
+    ax.set_facecolor('#1a1a1a')
+    ax.axis('off')
+    
+    # Création du tableau
+    table = ax.table(
+        cellText=cell_text,
+        colLabels=headers,
+        loc='center',
+        cellLoc='center',
+        colColours=['#4472C4'] * n_cols,  # Bleu pour l'en-tête
+        colWidths=[0.12] + [0.15] * (n_cols - 1)
+    )
+    
+    # Style du tableau
+    table.auto_set_font_size(False)
+    table.set_fontsize(9)
+    table.scale(1.2, 1.8)
+    
+    # Couleurs et style
+    for i in range(n_cols):
+        # En-tête en gras et blanc
+        table[(0, i)].set_text_props(weight='bold', color='white')
+        table[(0, i)].set_facecolor('#2E5090')  # Bleu foncé
+        
+        # Lignes alternées pour lisibilité
+        for j in range(1, n_rows + 1):
+            if j % 2 == 0:
+                table[(j, i)].set_facecolor('#2a2a2a')  # Gris foncé
+            else:
+                table[(j, i)].set_facecolor('#1a1a1a')  # Noir
+            
+            table[(j, i)].set_text_props(color='white')
+    
+    # Titre
+    plt.title(
+        'Tableau des erreurs - Interpolation',
+        fontsize=14,
+        fontweight='bold',
+        color='white',
+        pad=20
+    )
+    
+    plt.tight_layout()
+    plt.show()
 
 
 # ==========================================================
@@ -572,7 +625,7 @@ def tracer_comparaison_approximations(
     y_points = np.array(y_points, dtype=float)
 
     X = np.linspace(min(x_points), max(x_points), 500)
-
+    plt.close('all')
     plt.figure(figsize=(12, 7))
 
     # Nuage de points
@@ -667,79 +720,40 @@ def tracer_comparaison_approximations(
 #     TABLEAU D'ERREURS APPROXIMATION
 # ==========================================================
 
-def tableau_erreurs_approximation(
-        x_points, y_points, resultats, meilleur_degre
-):
+def tableau_erreurs_approximation(x_points, y_points, resultats, meilleur_degre):
     """
-    Affiche un tableau d'erreurs pour chaque polynôme d'approximation.
-    Le meilleur est marqué avec ★.
-    
+    Affiche un tableau d'erreurs pour chaque polynôme d'approximation
+    avec plt.table. Le meilleur degré est marqué avec ★ et coloré en vert.
+
     Paramètres :
         x_points       : liste des abscisses
         y_points       : liste des ordonnées
         resultats      : dictionnaire des résultats
         meilleur_degre : degré optimal
     """
+
     x_points = np.array(x_points, dtype=float)
     y_points = np.array(y_points, dtype=float)
 
     degres = list(resultats.keys())
 
-    # ========== AFFICHAGE CONSOLE ==========
-    print("\n" + "=" * 90)
-    print("TABLEAU DES ERREURS - APPROXIMATION")
-    print("=" * 90)
+    # ── Construction des en-têtes ──
+    headers = ["x", "y donné"]
 
-    # En-tête
-    header = f"{'x':>8} {'y donné':>10}"
     for degre in degres:
         marqueur = " ★" if degre == meilleur_degre else ""
-        header += f" {'P'+str(degre)+'(x)'+marqueur:>14} {'|Erreur|':>10}"
-    print(header)
-    print("-" * 90)
+        headers.append(f"P{degre}(x){marqueur}")
+        headers.append(f"|Erreur| P{degre}")
 
-    # Lignes
-    for i in range(len(x_points)):
-
-        ligne = f"{x_points[i]:8.3f} {y_points[i]:10.4f}"
-
-        for degre in degres:
-            coeffs = resultats[degre]["coeffs"]
-            val = float(evaluer_polynome(coeffs, x_points[i]))
-            err = abs(y_points[i] - val)
-            ligne += f" {val:14.4f} {err:10.2e}"
-
-        print(ligne)
-
-    # Résumé
-    print("-" * 90)
-
-    ligne_err = f"{'Erreur globale':>19}"
-    for degre in degres:
-        err = resultats[degre]["erreur_globale"]
-        marqueur = " ★" if degre == meilleur_degre else ""
-        ligne_err += f" {err:14.6f} {'':>10}{marqueur}"
-
-    print(ligne_err)
-    print("=" * 90)
-
-    print(
-        f"\n→ Le meilleur polynôme est de degré {meilleur_degre} "
-        f"(erreur = {resultats[meilleur_degre]['erreur_globale']:.6f})"
-    )
-
-    # ========== FIGURE MATPLOTLIB ==========
+    # ── Construction des lignes ──
     donnees = []
-    headers_tab = ["x", "y donné"]
-
-    for degre in degres:
-        marqueur = " ★" if degre == meilleur_degre else ""
-        headers_tab.append(f"P{degre}(x){marqueur}")
-        headers_tab.append(f"|Erreur|")
 
     for i in range(len(x_points)):
 
-        ligne = [f"{x_points[i]:.3f}", f"{y_points[i]:.4f}"]
+        ligne = [
+            f"{x_points[i]:.4f}",
+            f"{y_points[i]:.4f}"
+        ]
 
         for degre in degres:
             coeffs = resultats[degre]["coeffs"]
@@ -750,35 +764,178 @@ def tableau_erreurs_approximation(
 
         donnees.append(ligne)
 
-    fig, ax = plt.subplots(
-        figsize=(max(12, 4 * len(degres)), max(3, 0.4 * len(x_points)))
-    )
-    ax.axis('off')
+    # ── Ligne erreur globale ──
+    ligne_glob = ["Erreur globale (Lp)", "—"]
 
+    for degre in degres:
+        err_g = resultats[degre]["erreur_globale"]
+        marqueur = " ★" if degre == meilleur_degre else ""
+        ligne_glob.append(f"{err_g:.6f}{marqueur}")
+        ligne_glob.append("—")
+
+    donnees.append(ligne_glob)
+
+    # ── Dimensions ──
+    nb_cols = len(headers)
+    nb_rows = len(donnees)
+    
+    fig, ax = plt.subplots(
+        figsize=(
+            max(10, nb_cols * 2),
+            max(3, nb_rows * 0.55 + 1.5)
+        )
+    )
+    ax.axis("off")
+
+    # ── Création de la table ──
     table = ax.table(
         cellText=donnees,
-        colLabels=headers_tab,
-        loc='center',
-        cellLoc='center'
+        colLabels=headers,
+        loc="center",
+        cellLoc="center"
     )
 
     table.auto_set_font_size(False)
-    table.set_fontsize(8)
-    table.scale(1.2, 1.4)
+    table.set_fontsize(9)
+    table.scale(1.2, 1.6)
 
-    # Colorer les colonnes du meilleur polynôme
-    for key, cell in table.get_celld().items():
+    # ── Style en-têtes ──
+    for col in range(nb_cols):
+        cell = table[0, col]
+        cell.set_facecolor("#4472C4")
+        cell.set_text_props(color="white", fontweight="bold")
 
-        row, col = key
+    # ── Style lignes alternées ──
+    for row in range(1, nb_rows):
+        for col in range(nb_cols):
+            cell = table[row, col]
+            if row % 2 == 1:
+                cell.set_facecolor("#FFFFFF")
+            else:
+                cell.set_facecolor("#D9E1F2")
 
-        if row == 0:
-            cell.set_facecolor('#4472C4')
-            cell.set_text_props(color='white', fontweight='bold')
+    # ── Style ligne erreur globale (dernière ligne) ──
+    for col in range(nb_cols):
+        cell = table[nb_rows, col]
+        cell.set_facecolor("#2C3E50")
+        cell.set_text_props(color="white", fontweight="bold")
+
+    # ── Colorer les colonnes du meilleur polynôme en vert ──
+    for idx, degre in enumerate(degres):
+
+        # colonne P(x) du degré
+        col_val = 2 + idx * 2
+        # colonne erreur du degré
+        col_err = 2 + idx * 2 + 1
+
+        if degre == meilleur_degre:
+
+            # En-tête en vert
+            table[0, col_val].set_facecolor("#1E8449")
+            table[0, col_err].set_facecolor("#1E8449")
+
+            # Lignes en vert clair
+            for row in range(1, nb_rows + 1):
+                table[row, col_val].set_facecolor("#D5F5E3")
+                table[row, col_val].set_text_props(
+                    color="#1E8449", fontweight="bold"
+                )
+                table[row, col_err].set_facecolor("#FFE0E0")
+                table[row, col_err].set_text_props(
+                    color="#CC0000"
+                )
+
+        else:
+
+            # Erreurs des autres en rouge clair
+            for row in range(1, nb_rows):
+                table[row, col_err].set_facecolor("#FFF0F0")
+                table[row, col_err].set_text_props(color="#CC0000")
 
     plt.title(
-        f"Tableau des erreurs - Meilleur : degré {meilleur_degre}",
+        f"Tableau des erreurs — Approximation | "
+        f"Meilleur polynôme : degré {meilleur_degre} ★",
         fontsize=12,
-        fontweight='bold'
+        fontweight="bold",
+        pad=20
     )
+
     plt.tight_layout()
     plt.show()
+
+
+ # ==========================================================
+#         RECOMMANDATION DE L'ALGORITHME
+# ==========================================================
+
+def recommander_methode(x_points, y_points):
+    """
+    Analyse un nuage de points et recommande la méthode la plus adaptée.
+    
+    Paramètres :
+        x_points : liste des abscisses
+        y_points : liste des ordonnées
+    
+    Retourne :
+        Un tuple (nom_methode, texte_recommandation)
+    """
+    
+    # ── Règle 0 : Vérification des données ──
+    try:
+        x_points = np.array(x_points, dtype=float)
+        y_points = np.array(y_points, dtype=float)
+        if len(x_points) != len(y_points) or len(x_points) < 2:
+            return (
+                None,
+                "Veuillez entrer au moins 2 points valides (x et y)."
+            )
+    except (ValueError, TypeError):
+        return (None, "En attente de données valides...")
+
+    n = len(x_points)
+    
+    # ── Règle 1 : Trop de points pour l'interpolation ──
+    # Le phénomène de Runge rend l'interpolation instable avec beaucoup de points.
+    if n > 10:
+        return (
+            "Moindres carrés",
+            f"Avec {n} points, l'approximation par Moindres Carrés est fortement recommandée "
+            f"pour éviter les oscillations (phénomène de Runge) typiques de l'interpolation."
+        )
+    
+    # ── Règle 2 : Détection de "bruit" pour peu de points ──
+    # Si les points sont "bruyants", l'approximation est meilleure.
+    # Sinon, l'interpolation est idéale.
+    else:
+        try:
+            # On calcule l'erreur d'une régression linéaire simple
+            coeffs_lin = approximation_discrete(x_points, y_points, 1)
+            erreurs_lin = erreur_discrete(x_points, y_points, coeffs_lin)
+            
+            # On normalise l'erreur par rapport à l'étendue des données y
+            y_range = np.max(y_points) - np.min(y_points)
+            if y_range < 1e-9: y_range = 1.0 # Éviter division par zéro
+
+            erreur_relative = norme_discrete(erreurs_lin, 2) / y_range
+
+            # Seuil : si l'erreur relative est > 20%, on considère les données bruitées
+            if erreur_relative > 0.2:
+                return (
+                    "Moindres carrés",
+                    f"Les données ne semblent pas suivre une tendance simple (potentiellement bruitées). "
+                    f"L'approximation par Moindres Carrés est plus adaptée pour lisser les données."
+                )
+            else:
+                return (
+                    "Lagrange",
+                    f"Avec {n} points et des données qui semblent précises, "
+                    f"l'interpolation (Lagrange ou Newton) est idéale pour trouver "
+                    f"le polynôme exact passant par tous les points."
+                )
+        except np.linalg.LinAlgError:
+            # Si le calcul des moindres carrés échoue (données mal conditionnées)
+            return (
+                "Lagrange",
+                "Les données sont peut-être mal conditionnées. "
+                "L'interpolation est une approche plus directe dans ce cas."
+            )

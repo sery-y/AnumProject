@@ -53,71 +53,151 @@ def dichotomie(f_expr, a, b, tol, nmax):
 
 
 def verifier_stabilite(phi, x, a, b):
-
-    f = sp.lambdify(x, phi, "numpy")
-    xs = np.linspace(a, b, 300)
-
-    vals = f(xs)
-
-    return np.all(np.isfinite(vals)) and np.all((vals >= a) & (vals <= b))
+    xs, vals = evaluer_phi_safe(phi, x, a, b)
+    finite_vals = vals[np.isfinite(vals)]
+    # Trop de NaN → phi instable sur l'intervalle
+    if len(finite_vals) < 10:
+        return False
+    return np.all((finite_vals >= a) & (finite_vals <= b))
 
 
 
 # k<1 k=|max (f')|
 
 def verifier_contractante(phi, x, a, b):
-
     dphi = sp.diff(phi, x)
     g = sp.lambdify(x, dphi, "numpy")
-
     xs = np.linspace(a, b, 300)
+    try:
+        with np.errstate(all='ignore'):
+            raw = g(xs)
+        if np.isscalar(raw):
+            raw = np.full(300, float(raw))
+        else:
+            raw = np.asarray(raw, dtype=complex)
+            imag = np.abs(raw.imag)
+            raw = np.where(imag < 1e-10, raw.real, np.nan)
+            raw = raw.astype(float)
+        vals = np.abs(raw)
+        finite_vals = vals[np.isfinite(vals)]
+        if len(finite_vals) == 0:
+            return False, float('inf')
+        k = float(np.max(finite_vals))
+        return k < 1, k
+    except Exception:
+        return False, float('inf')
 
-    vals = np.abs(g(xs))
 
-    k = np.nanmax(vals)
+def point_fixe_avec_phi(f_expr, phi_exprs, a, b, x0, tol, nmax):
+    """
+    Méthode du point fixe avec phi(s) fournie(s) manuellement.
 
-    return k < 1, float(k)
+    Paramètres
+    ----------
+    f_expr   : str  – la fonction f(x) dont on cherche f(x)=0  (pour TVI et rapport)
+    phi_exprs: str ou list[str]  – une ou plusieurs fonctions phi(x)
+    a, b     : float – intervalle [a, b]
+    x0  
+    rapport        : list[(phi_sym, stable, contractante, k)]
+    """
 
-
-def point_fixe_avec_phi(phi_expr, a, b, x0, tol, nmax):
-  
     x = sp.Symbol('x')
-    phi_sym = sp.sympify(phi_expr)
-    
-    is_stable = verifier_stabilite(phi_sym, x, a, b)
-    is_contractant, k = verifier_contractante(phi_sym, x, a, b)
-    #si elle est non stable ou non cntractante on arrete 
-    if not is_stable or not is_contractant:
-        return False, None, [], [], k, is_stable, is_contractant
 
-   
-    phi_num = sp.lambdify(x, phi_sym, "numpy")
-    curr_x = x0
+    # TVI 
+    f_sym = sp.sympify(f_expr)
+    f_num = sp.lambdify(x, f_sym, "numpy")
+    if f_num(a) * f_num(b) > 0:
+        print("f(a) et f(b) ont le même signe ")
+        return False, None, None, [], [], []
+
+    # phi_exprs en liste
+    if isinstance(phi_exprs, str):
+        phi_exprs = [phi_exprs]
+
+    
+    rapport = []
+    meilleur_phi = None
+    meilleur_k   = 1.0          # on cherche k < 1, le plus petit possible
+    #tes phis
+
+    for phi_str in phi_exprs:
+        try:
+            phi_sym = sp.sympify(phi_str)
+        except Exception:
+            print(f"  [ERREUR] impossible de parser : {phi_str}")
+            continue
+
+        stable= verifier_stabilite(phi_sym, x, a, b)
+        contractant, k = verifier_contractante(phi_sym, x, a, b)
+
+        rapport.append((phi_sym, stable, contractant, k))
+        if stable and contractant and k < meilleur_k :
+            meilleur_k   = k
+            meilleur_phi = phi_sym
+
+    #pas de phi valid 
+    if meilleur_phi is None:
+        print("\n Aucune phi donner  n'est stable et contractante sur [a, b].")
+        print(" Méthode du point fixe non applicable avec ces phi.")
+        return False, None, None, [], [], rapport
+
+
+    # x SUV+ phi(x) 
+    phi_num  = sp.lambdify(x, meilleur_phi, "numpy")
+    curr_x   = x0
     iterations = [x0]
-    erreurs = []
-    sol = None
-    success = False
+    erreurs    = []
+    sol        = None
+    success    = False
 
     for i in range(nmax):
         try:
-            x_next = phi_num(curr_x)
-            
-            # Calcul de l'erreur 
-            err = (k / (1 - k)) * abs(x_next - curr_x)
-            
+            with np.errstate(all='ignore'):
+                x_next = phi_num(curr_x)
+
+            # Protection NaN / inf / complexe
+            if np.iscomplex(x_next):
+                x_next = float(np.real(x_next))
+            x_next = float(x_next)
+            if not np.isfinite(x_next):
+                print(f"  [iter {i}] x_next infini ")
+                break
+
+            err = (meilleur_k / (1 - meilleur_k)) * abs(x_next - curr_x)
             iterations.append(x_next)
             erreurs.append(err)
-            
+
             if err < tol:
                 success = True
                 sol = x_next
                 break
-                
-            curr_x = x_next
-        except:
-            break
 
-    return success, sol, iterations, erreurs, k, is_stable, is_contractant
+            curr_x = x_next
+
+        except Exception as e:
+            print(f"  [iter {i}] Exception : {e}" )
+            break
+     # recommandations
+    print("\n" + "="*58)
+    print("  Analyse — Point Fixe ")
+    print("="*58)
+
+    n_valides   = sum(1 for _, s, c, _ in rapport if s and c)
+    n_invalides = len(rapport) - n_valides
+
+    if not success:
+        print(f"\n  La méthode n'a pas convergé en {nmax} itérations.")
+        print("  Essayez une phi avec un k plus petit, ou resserrez l'intervalle [a, b].")
+    else:
+        print(f"\n  Convergence obtenue en {len(iterations)-1} itérations paramatres bien choisi ")
+    if success and len(iterations) > 10:
+        print("  il est recommader de utuliser la methode newton")
+
+    # Comparaison
+    print("  Newton reste le choix le plus rapide et le plus fiable.")
+    print("="*58 + "\n")
+
+    return success, meilleur_phi, sol, iterations, erreurs, rapport
 
 def point_fixe(f_expr, a, b, x0, tol, nmax):
 
@@ -135,7 +215,7 @@ def point_fixe(f_expr, a, b, x0, tol, nmax):
 
     # tvi 
     if fa * fb > 0:
-        print("f(a) et f(b) ont le même signe")
+        print("f(a) et f(b) ont le même signe ")
         return False,None,None,None,None,None
     
 
@@ -165,21 +245,29 @@ def point_fixe(f_expr, a, b, x0, tol, nmax):
     phi = sp.lambdify(x, meilleur_phi, "numpy")
 
     x = x0
-    iterations = []
+    iterations = [x]
     erreurs=[]
 
     for i in range(nmax):
+        try:
+            with np.errstate(all='ignore'):
+                x_next = phi(x)
+            if np.iscomplex(x_next):
+                x_next = float(np.real(x_next))
+            x_next = float(x_next)
+            if not np.isfinite(x_next):
+                break
+            erreur = (meilleur_k / (1 - meilleur_k)) * abs(x_next - x)
 
-        x_next = phi(x)
-        erreur = (meilleur_k / (1 - meilleur_k)) * abs(x_next - x)
+            erreurs.append(erreur)
+            iterations.append(x_next)
+            
+            if erreur < tol:
+                break
 
-        erreurs.append(erreur)
-        iterations.append(x_next)
-        
-        if erreur < tol:
+            x = x_next
+        except Exception:
             break
-
-        x = x_next
 
     return True, meilleur_phi, x_next, iterations, erreurs,rapport
 
@@ -200,7 +288,7 @@ def point_fixe_avec_relaxation(f_expr, a, b, x0, tol, nmax):
 
     # tvi 
     if fa * fb > 0:
-        print("f(a) et f(b) ont le même signe")
+        print("f(a) et f(b) ont le même signe ")
         return False,None,None,None,None,None
     
 
@@ -230,21 +318,29 @@ def point_fixe_avec_relaxation(f_expr, a, b, x0, tol, nmax):
     phi = sp.lambdify(x, meilleur_phi, "numpy")
 
     x = x0
-    iterations = []
+    iterations = [x]
     erreurs=[]
 
     for i in range(nmax):
+        try:
+            with np.errstate(all='ignore'):
+                x_next = phi(x)
+            if np.iscomplex(x_next):
+                x_next = float(np.real(x_next))
+            x_next = float(x_next)
+            if not np.isfinite(x_next):
+                break
+            erreur = (meilleur_k / (1 - meilleur_k)) * abs(x_next - x)
 
-        x_next = phi(x)
-        erreur = (meilleur_k / (1 - meilleur_k)) * abs(x_next - x)
+            erreurs.append(erreur)
+            iterations.append(x_next)
+            
+            if erreur < tol:
+                break
 
-        erreurs.append(erreur)
-        iterations.append(x_next)
-        
-        if erreur < tol:
+            x = x_next
+        except Exception:
             break
-
-        x = x_next
 
     return True, meilleur_phi, x_next, iterations, erreurs,rapport
 
@@ -364,6 +460,7 @@ def generer_phi_avec_relaxation_et_newton(f, x):
         except: continue
             
     return unique_phi
+
 
 
 
@@ -504,7 +601,7 @@ def afficher_tableau_plt(methode, iterations, erreurs):
 
 
 
-def trace_courbe(f, iterations, solution,a,b,titre):
+def trace_courbe(f_expr, iterations, solution,a,b,titre):
     x = sp.Symbol('x')
     f = sp.lambdify(x, f_expr, 'numpy')
     x = np.linspace(a, b, 500)
@@ -599,7 +696,25 @@ def calculer_ordre_point_fixe(phi_expr, solution):
 
     return 3, 0.0                      # ordre >= 3
 
-
+def evaluer_phi_safe(phi, x_sym, a, b, n=300):
+    """Évalue phi(x) sur [a,b] en filtrant les NaN/inf/complexes."""
+    f = sp.lambdify(x_sym, phi, "numpy")
+    xs = np.linspace(a, b, n)
+    try:
+        with np.errstate(all='ignore'):
+            vals = f(xs)
+        # Gérer le cas scalaire (phi = constante)
+        if np.isscalar(vals):
+            vals = np.full(n, float(vals))
+        else:
+            vals = np.asarray(vals, dtype=complex)
+            # Garder partie réelle seulement si partie imaginaire ≈ 0
+            imag = np.abs(vals.imag)
+            vals = np.where(imag < 1e-10, vals.real, np.nan)
+            vals = vals.astype(float)
+        return xs, vals
+    except Exception:
+        return xs, np.full(n, np.nan)
 
 
 # Recommendation automatique selon l ordre

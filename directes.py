@@ -151,10 +151,10 @@ def afficher_matrices(L, U, k):
     print("\nMatrice U :")
     print(U)
 
-def LU(A, b, verbose=False):
+def LU(A, b, affiche=False):
     n = len(A)
     A = A.astype(float)
-    b = b.astype(float)  # ← travailler sur une copie
+    b = b.astype(float)  
     L = np.eye(n)
     perm = list(range(n))
 
@@ -167,9 +167,9 @@ def LU(A, b, verbose=False):
             m = A[i][k] / A[k][k]
             L[i][k] = m
             A[i, k:] = A[i, k:] - m * A[k, k:]
-        if verbose:
+        if affiche:
             afficher_matrices(L, A, k)
-    return L, A.copy(), perm  # ← U = copie de A
+    return L, A.copy(), perm
 
 def resoudre_LU(L, U, b):
     n = len(b)

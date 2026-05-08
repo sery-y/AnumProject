@@ -14,7 +14,7 @@ import csv, json
 
 from interfacePartagee import C, F, Card, StatCard, mk_entry, mk_btn, configure_treeview_style
 from axe1 import (dichotomie, point_fixe, newton_,
-                  point_fixe_avec_relaxation, recommander_methode)
+                  point_fixe_avec_relaxation, recommander_methode, point_fixe_avec_phi, trace_courbe,afficher_tableau_plt)
 
 
 class Axe1Frame(tk.Frame):
@@ -117,6 +117,14 @@ class Axe1Frame(tk.Frame):
             e = mk_entry(col, default, w)
             e.pack(ipady=5)
             setattr(self, attr, e)
+        
+        # Champ phi (caché par défaut)
+        self._phi_col = tk.Frame(row, bg=C["card"])
+        tk.Label(self._phi_col, text="φ(x) =", font=F["small"],
+         bg=C["card"], fg=C["gray"]).pack(anchor="w", pady=(0, 3))
+        self.e_phi = mk_entry(self._phi_col, "", 15)
+        self.e_phi.pack(ipady=5)
+        self._phi_col.pack_forget()
 
         for attr in ["e_fx", "e_x0", "e_a", "e_b", "e_tol"]:
             getattr(self, attr).bind("<KeyRelease>", self._on_input_change)
@@ -160,6 +168,17 @@ class Axe1Frame(tk.Frame):
             self.tree.column(col, width=w, anchor="center")
         self.tree.pack(fill="x")
 
+        # ── Boutons supplémentaires ──
+        extra_card = Card(content, "Outils en plus")
+        extra_card.pack(fill="x", **p)
+        btn_row = tk.Frame(extra_card.body, bg=C["card"])
+        btn_row.pack(fill="x")
+        
+        mk_btn(btn_row, "Tracer courbe", self._tracer_courbe, secondary=True).pack(side="left", padx=(0, 8))
+        mk_btn(btn_row, "Tracer tableau", self._tracer_tableau, secondary=True).pack(side="left", padx=(0, 8))
+        
+
+
         btns = tk.Frame(tc.body, bg=C["card"], pady=8)
         btns.pack(fill="x")
         mk_btn(btns, " Exporter CSV",  self._export_csv,  secondary=True).pack(side="left", padx=(0, 8))
@@ -169,6 +188,29 @@ class Axe1Frame(tk.Frame):
         self._update_rec()
 
     # ──────────────────────────────────────────
+    def _tracer_courbe(self):
+      if not self._iters:
+        messagebox.showinfo("Info", "Aucun résultat à tracer.")
+        return
+      f_str   = self.e_fx.get().strip().replace('^', '**')
+      a       = float(self.e_a.get())
+      b       = float(self.e_b.get())
+      iters   = [it[1] for it in self._iters]
+      sol     = self.st_r.get() if hasattr(self.st_r, 'get') else iters[-1]
+      titre   = f"Courbe — {self.algo_var.get()}"
+      plt.close('all')
+      trace_courbe(f_str, iters, float(sol), a, b, titre)
+
+    def _tracer_tableau(self):
+      if not self._iters:
+        messagebox.showinfo("Info", "Aucun résultat à afficher.")
+        return
+      methode = self.algo_var.get()
+      iters   = [it[1] for it in self._iters]
+      erreurs = [it[3] for it in self._iters]
+      plt.close('all')
+      afficher_tableau_plt(methode, iters, erreurs)
+
     def _style_ax(self, ax):
         ax.tick_params(colors=C["gray"], labelsize=8)
         for sp_ in ax.spines.values():
@@ -185,6 +227,11 @@ class Axe1Frame(tk.Frame):
             f.configure(bg=bg, highlightbackground=brd)
             for w in f.winfo_children():
                 w.configure(bg=bg)
+        if hasattr(self, '_phi_col'):
+          if name == "Point fixe":
+            self._phi_col.pack(side="left", padx=(0, 10))
+          else:
+            self._phi_col.pack_forget()
 
     def _update_rec(self):
         if not self._initialized:
@@ -214,10 +261,18 @@ class Axe1Frame(tk.Frame):
             self._dicho_success = ok_d
             self._dicho_sol     = sol_d
 
-            ok_pf, phi, sol_pf, _, _, _ = point_fixe(f_str, a, b, x0, tol, nmax)
+            phi_str = self.e_phi.get().strip().replace('^', '**')
+            if phi_str:
+              ok_pf, phi, sol_pf, _, _, _ = point_fixe_avec_phi(
+              f_str, phi_str, a, b, x0, tol, nmax)
+            else:
+              ok_pf, phi, sol_pf, _, _, _ = point_fixe(f_str, a, b, x0, tol, nmax)
+
             self._pf_success = ok_pf
             self._pf_sol     = sol_pf
             self._pf_phi     = phi
+
+            
 
             ok_n, sol_n, _, _, *_ = newton_(f_str, a, b, x0, tol, nmax)
             self._newton_success = ok_n
@@ -276,9 +331,18 @@ class Axe1Frame(tk.Frame):
                     iters_table.append((i, xn, float(f_num(xn)), float(err)))
 
             elif algo == "Point fixe":
-                ok, phi, sol, iters, erreurs, rapport = point_fixe(
+                phi_str = self.e_phi.get().strip().replace('^', '**')
+
+                if phi_str:
+                  ok, phi, sol, iters, erreurs, rapport = point_fixe_avec_phi(
+                  f_str, phi_str, a, b, x0, tol, nmax)
+                  if not ok:
+                    messagebox.showwarning("Point fixe", "Méthode du point fixe non applicable avec cette phi.")
+                    return
+                else:
+                  ok, phi, sol, iters, erreurs, rapport = point_fixe(
                     f_str, a, b, x0, tol, nmax)
-                if not ok:
+                  if not ok:
                     msg = ("Aucune φ(x) stable et contractante trouvée sur [a,b].\n"
                            "Point fixe non applicable.\n"
                            "Voulez-vous essayer avec relaxation / Newton ?")
@@ -290,6 +354,11 @@ class Axe1Frame(tk.Frame):
                                 "Échec",
                                 "Même avec relaxation/Newton, aucune convergence trouvée.")
                     return
+                # pour afficher phi quand je la genere
+                if not phi_str and ok and phi is not None:
+                  self.e_phi.delete(0, "end")
+                  self.e_phi.insert(0, str(phi))
+
                 root_val = sol
                 for i, (xn, err) in enumerate(zip(iters, erreurs)):
                     iters_table.append((i, xn, float(f_num(xn)), float(err)))

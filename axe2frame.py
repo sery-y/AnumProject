@@ -18,8 +18,8 @@ from matrices import *
 def decomp_lu(A, b):
     L, U, perm = LU(A, b)
     if L is None or U is None:
-        return None, None, None
-    b_perm = b[perm]  # ← CRUCIAL : appliquer la permutation sur b
+        return None, None, None, []
+    b_perm = b[perm]
     x = resoudre_LU(L, U, b_perm)
     if x is None:
         return None, L, U
@@ -235,6 +235,7 @@ class Axe2Frame(tk.Frame):
             (1, "‖·‖₁", "Somme |xᵢ|"),
             (2, "‖·‖₂", "Euclidienne"),
             (0, "‖·‖∞", "Max |xᵢ|"),
+            (3, "‖·‖p", ""),
         ]:
             f = tk.Frame(norm_btn_row, bg=C["card2"],
                          highlightthickness=1, highlightbackground=C["border"],
@@ -247,6 +248,16 @@ class Axe2Frame(tk.Frame):
             for w in [f, nl, tl]:
                 w.bind("<Button-1>", lambda e, v=val: self._sel_norm(v))
             self._norm_frames[val] = f
+        
+        #logique pour norme p
+        self._p_custom_col = tk.Frame(norm_col, bg=C["card"])
+        self._p_custom_col.pack(anchor="w", pady=(4, 0))
+        tk.Label(self._p_custom_col, text="p =", font=F["small"],
+         bg=C["card"], fg=C["gray"]).pack(side="left", padx=(0, 4))
+        self._p_custom_entry = mk_entry(self._p_custom_col, "3", 4)
+        self._p_custom_entry.pack(side="left", ipady=4)
+        self._p_custom_col.pack_forget()
+
         self._sel_norm(2)
 
         self._x0_frame = tk.Frame(self._iter_param_card.body, bg=C["card"])
@@ -378,6 +389,10 @@ class Axe2Frame(tk.Frame):
             f.configure(bg=bg, highlightbackground=brd)
             for w in f.winfo_children():
                 w.configure(bg=bg)
+        if val == 3:
+          self._p_custom_col.pack(anchor="w", pady=(4, 0))
+        else:
+          self._p_custom_col.pack_forget()
 
     def _rebuild_matrix(self):
         self._n = self._n_var.get()
@@ -530,9 +545,17 @@ class Axe2Frame(tk.Frame):
                 tol      = float(self.e_tol.get())
                 nmax     = int(self.e_nmax.get())
                 norm_type = self._norm_var.get()
+
+                p_val     = None
+                if norm_type == 3:
+                  try:
+                    p_val = int(self._p_custom_entry.get())
+                  except ValueError:
+                    p_val = 3
+
                 x0       = np.array([float(e.get()) for e in self._x0_entries])
                 converged, x_sol, steps_or_iters, errors, rho_val, iter_matrix, M_norm_val = \
-                    jacobi(A, b, x0, tol, nmax, norm_type)
+                    jacobi(A, b, x0, tol, nmax, norm_type, p_val)
                 
                 if not converged:
                     messagebox.showwarning("Jacobi",
@@ -549,9 +572,17 @@ class Axe2Frame(tk.Frame):
                 tol      = float(self.e_tol.get())
                 nmax     = int(self.e_nmax.get())
                 norm_type = self._norm_var.get()
+                
+                p_val     = None
+                if norm_type == 3:
+                  try:
+                    p_val = int(self._p_custom_entry.get())
+                  except ValueError:
+                    p_val = 3
+
                 x0       = np.array([float(e.get()) for e in self._x0_entries])
                 converged, x_sol, steps_or_iters, errors, rho_val, iter_matrix, M_norm_val = \
-                    gauss_seidel(A, b, x0, tol, nmax, norm_type)
+                    gauss_seidel(A, b, x0, tol, nmax, norm_type, p_val)
                 if not converged:
                     messagebox.showwarning("Gauss-Seidel",
                         f"Pas de convergence en {nmax} itérations.\n"

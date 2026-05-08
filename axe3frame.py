@@ -21,16 +21,14 @@ from interfacePartagee import C, F, Card, StatCard, mk_entry, mk_btn
 from approximation import (
     evaluer_polynome,
     norme_discrete,
-    norme_continue,
+
     interpolation_newton,
     interpolation_lagrange,
     tracer_interpolations,
     tableau_erreurs_interpolation,
-    construire_matrice_discrete,
-    construire_vecteur_discret,
+    
     approximation_discrete,
-    construire_matrice_continue,
-    construire_vecteur_continue,
+    
     approximation_continue,
     erreur_discrete,
     erreur_continue,
@@ -38,6 +36,7 @@ from approximation import (
     comparer_approximations_discretes,
     tracer_comparaison_approximations,
     tableau_erreurs_approximation,
+    recommander_methode,
 )
 
 
@@ -60,8 +59,7 @@ class Axe3Frame(tk.Frame):
         top.pack(fill="x")
         tk.Label(top, text="Axe 3 — Interpolation & Approximation",
                  font=F["title"], bg=C["bg"], fg=C["white"]).pack(side="left")
-        tk.Label(top, text=" Étudiant 3 ", font=F["small"],
-                 bg="#2a1f0a", fg=C["amber"], padx=8, pady=4).pack(side="right", anchor="n")
+        
         tk.Frame(self, bg=C["border"], height=1).pack(fill="x")
 
         # ── Scrollable canvas ──
@@ -114,7 +112,7 @@ class Axe3Frame(tk.Frame):
         rec.pack(fill="x", **p)
         tk.Label(rec, text="Recommandation", font=F["h3"],
                  bg=C["teal_bg"], fg=C["teal"]).pack(anchor="w")
-        self._rec3 = tk.Label(rec, text="", font=F["body"],
+        self._rec3 = tk.Label(rec, text="Entrez le nuage de points (x et y) pour obtenir une recommandation automatique.", font=F["body"],
                               bg=C["teal_bg"], fg="#b0e8d5",
                               wraplength=900, justify="left")
         self._rec3.pack(anchor="w", pady=(4, 0))
@@ -131,8 +129,7 @@ class Axe3Frame(tk.Frame):
             ("x à évaluer",   "e_xi",  "2.5",            7),
             ("Degré",         "e_deg", "2",               4),
             ("Norme p",       "e_p",   "2",               4),
-            ("a (borne inf)", "e_a",   "0",               4),
-            ("b (borne sup)", "e_b",   "5",               4),
+            
         ]:
             col = tk.Frame(row, bg=C["card"])
             col.pack(side="left", padx=(0, 10))
@@ -141,11 +138,16 @@ class Axe3Frame(tk.Frame):
             e = mk_entry(col, default, w)
             e.pack(ipady=5)
             setattr(self, attr, e)
+        
+        self.e_xp.bind("<FocusOut>", self._update_recommendation) #se decleche si lutilisateur clique ailleurs
+        self.e_yp.bind("<FocusOut>", self._update_recommendation)
+        self.e_xp.bind("<Return>", self._update_recommendation) # se decleche quand il tape entree
+        self.e_yp.bind("<Return>", self._update_recommendation)
 
         col_b = tk.Frame(row, bg=C["card"])
         col_b.pack(side="left")
         tk.Label(col_b, text=" ", font=F["small"], bg=C["card"], fg=C["gray"]).pack(pady=(0, 3))
-        mk_btn(col_b, "Calculer ↗", self._run3, C["amber"]).pack(ipady=4)
+        mk_btn(col_b, "Calculer ", self._run3, C["amber"]).pack(ipady=4)
 
         # ── Stats ──
         sr = tk.Frame(content, bg=C["bg"])
@@ -173,7 +175,8 @@ class Axe3Frame(tk.Frame):
         # ── Graphe ──
         gc = Card(content, "Visualisation")
         gc.pack(fill="x", **p)
-        self.fig3, self.ax3 = plt.subplots(figsize=(7, 3.5), facecolor=C["card"])
+        self.fig3, self.ax3 = plt.subplots(figsize=(10, 4), facecolor=C["card"])
+        self.fig3.set_tight_layout(True)
         self.ax3.set_facecolor(C["bg"])
         for sp_ in self.ax3.spines.values():
             sp_.set_edgecolor(C["border"])
@@ -188,7 +191,7 @@ class Axe3Frame(tk.Frame):
         btn_row.pack(fill="x")
         mk_btn(btn_row, "📊 Tableau d'erreurs",
                self._show_error_table,  secondary=True).pack(side="left", padx=(0, 8))
-        mk_btn(btn_row, "📈 Comparer degrés 1→4",
+        mk_btn(btn_row, "📈 Comparer (algo-interpolation) ou (degrés-approximation)",
                self._compare_degrees,   secondary=True).pack(side="left", padx=(0, 8))
         mk_btn(btn_row, "🔢 Normes (L1 / L2 / L∞)",
                self._show_norms,        secondary=True).pack(side="left")
@@ -198,9 +201,8 @@ class Axe3Frame(tk.Frame):
         ec.pack(fill="x", **p)
         btns = tk.Frame(ec.body, bg=C["card"])
         btns.pack(fill="x")
-        mk_btn(btns, "⬇ Exporter CSV",        self._export3, secondary=True).pack(side="left", padx=(0, 8))
-        mk_btn(btns, "⬆ Importer points CSV",  self._import3, secondary=True).pack(side="left")
-
+        mk_btn(btns, " Exporter CSV",        self._export3, secondary=True).pack(side="left", padx=(0, 8))
+        
         self._sel_meth("Lagrange")
 
         tk.Frame(content, bg=C["bg"], height=20).pack()
@@ -221,19 +223,22 @@ class Axe3Frame(tk.Frame):
       state = "disabled" if is_interpolation else "normal"
       self.e_deg.configure(state=state)
 
-      recs = {
-        "Lagrange":
-            "Lagrange est simple mais peut osciller (phénomène de Runge) avec beaucoup de points.",
-        "Newton diff. div.":
-            "Newton par différences divisées est plus stable numériquement et permet d'ajouter des points facilement.",
-        "Moindres carrés disc":
-            "Moindres carrés discrets minimise Σ(yi − P(xi))². Idéal pour données bruitées en nombre fini de points.",
-        "Moindres carrés cont":
-            "Moindres carrés continus minimise ∫(f−P)² sur [a,b]. Idéal pour approximer une fonction connue sur un intervalle.",
-        "Descente gradient":
-            "Descente de gradient optimise itérativement la droite de régression y = a0 + a1·x.",
-    }
-      self._rec3.configure(text=recs.get(name, ""))
+    def _update_recommendation(self, event=None):
+        
+        try:
+            x_points = [float(v) for v in self.e_xp.get().split(",")]
+            y_points = [float(v) for v in self.e_yp.get().split(",")]
+        except Exception:
+            self._rec3.configure(text="En attente de données valides...")
+            return
+
+        # Appel de la fonction  de axe3.py
+        reco_methode, reco_texte = recommander_methode(x_points, y_points)
+        
+        # Mise à jour du texte de recommandation dans l'interface
+        self._rec3.configure(text=reco_texte)
+
+        
 
     # ──────────────────────────────────────────
     def _parse_inputs(self):
@@ -244,8 +249,8 @@ class Axe3Frame(tk.Frame):
         deg    = int(self.e_deg.get())
         p_raw  = self.e_p.get().strip()
         p_norm = inf if p_raw.lower() in ("inf", "∞") else int(p_raw)
-        a      = float(self.e_a.get())
-        b      = float(self.e_b.get())
+        a = float(np.min(xp)) #definir l intervalle pour l approxiamation
+        b = float(np.max(xp))
         return xp, yp, xi, deg, p_norm, a, b
 
     # ──────────────────────────────────────────
@@ -348,7 +353,11 @@ class Axe3Frame(tk.Frame):
         self.ax3.legend(facecolor=C["card"], edgecolor=C["border"],
                         labelcolor=C["white"], fontsize=8)
         self.fig3.tight_layout(pad=0.8)
+        w = self.canvas3.get_tk_widget().winfo_width()
+        if w > 1:
+          self.fig3.set_size_inches(w / 100, 4)
         self.canvas3.draw()
+        
 
         # ── Stats ──
         self.st3_v.set(f"{val:.6f}" if val is not None else "—")
@@ -389,6 +398,7 @@ class Axe3Frame(tk.Frame):
                 res = interpolation_newton(xp, yp)
                 polynomes.append((res["fonction"], "Newton"))
             # Appel de la fonction du module (console + figure matplotlib)
+            plt.close('all')
             tableau_erreurs_interpolation(xp, yp, polynomes)
 
         # ── Méthodes d'approximation → tableau_erreurs_approximation ──
@@ -428,6 +438,7 @@ class Axe3Frame(tk.Frame):
                 meilleur_degre = 1
 
             # Appel de la fonction du module (console + figure matplotlib)
+            plt.close('all')
             tableau_erreurs_approximation(xp, yp, resultats, meilleur_degre)
 
     # ──────────────────────────────────────────
@@ -497,7 +508,7 @@ class Axe3Frame(tk.Frame):
     # ──────────────────────────────────────────
     #  NORMES
     # ──────────────────────────────────────────
-    def _show_norms(self):
+    def _show_norms(self): #calcule les normes 1,2,inf pour le vecteur erreur de chaque methode 
         try:
             xp, yp, xi, deg, p_norm, a, b = self._parse_inputs()
         except Exception as e:
@@ -510,7 +521,7 @@ class Axe3Frame(tk.Frame):
         if method == "Lagrange":
             res    = interpolation_lagrange(xp, yp)
             P_func = res["fonction"]
-            errs   = [abs(yp[i] - float(P_func(xp[i]))) for i in range(len(xp))]
+            errs   = [abs(yp[i] - float(P_func(xp[i]))) for i in range(len(xp))] #difference de y-P
 
         elif method == "Newton diff. div.":
             res    = interpolation_newton(xp, yp)
@@ -589,35 +600,4 @@ class Axe3Frame(tk.Frame):
                 w.writerow([xi, yi])
         messagebox.showinfo("Exporté", f"Sauvegardé :\n{path}")
 
-    # ──────────────────────────────────────────
-    def _import3(self):
-        path = filedialog.askopenfilename(
-            filetypes=[("CSV", "*.csv"), ("Tous", "*.*")]
-        )
-        if not path:
-            return
-        try:
-            xp, yp = [], []
-            with open(path, newline='', encoding='utf-8') as f:
-                rows = list(csv.reader(f))
-            reading = False
-            for row in rows:
-                if row and row[0] == "x_i":
-                    reading = True
-                    continue
-                if reading and len(row) >= 2:
-                    try:
-                        xp.append(float(row[0]))
-                        yp.append(float(row[1]))
-                    except Exception:
-                        pass
-            if not xp:
-                messagebox.showerror("Erreur", "Aucune donnée trouvée.")
-                return
-            self.e_xp.delete(0, "end")
-            self.e_xp.insert(0, ",".join(str(v) for v in xp))
-            self.e_yp.delete(0, "end")
-            self.e_yp.insert(0, ",".join(str(v) for v in yp))
-            messagebox.showinfo("Importé", f"{len(xp)} points chargés.")
-        except Exception as e:
-            messagebox.showerror("Erreur import", str(e))
+    

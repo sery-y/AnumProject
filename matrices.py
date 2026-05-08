@@ -111,7 +111,7 @@ def choisir_norme(M, type_norme, p=None):
     elif type_norme == "2" or type_norme == 2:
         return norme_2(M)
 
-    elif type_norme == "p":
+    elif type_norme == "p" or type_norme == 3:
         if p is None:
             raise ValueError("Vous devez fournir p pour la norme p")
         return norme_p(M, p)
