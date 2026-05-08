@@ -5,6 +5,8 @@ from interfacePartagee import C, F
 from axe1frame import Axe1Frame
 from axe2frame import Axe2Frame
 from axe3frame import Axe3Frame
+from deriveesframe import DeriveesFrame
+from comparaisonframe import ComparaisonFrame
 
 
 class App(tk.Tk):
@@ -16,7 +18,6 @@ class App(tk.Tk):
         self.configure(bg=C["bg"])
         self._build()
 
-    # ──────────────────────────────────────────
     def _build(self):
         # ── Sidebar ──
         sidebar = tk.Frame(self, bg=C["panel"], width=230)
@@ -61,36 +62,52 @@ class App(tk.Tk):
 
         tk.Frame(sidebar, bg=C["border"], height=1).pack(fill="x")
 
+        # ── Section OUTILS ──
         nav2 = tk.Frame(sidebar, bg=C["panel"], pady=14)
         nav2.pack(fill="x")
         tk.Label(nav2, text="OUTILS", font=("Segoe UI", 8, "bold"),
                  bg=C["panel"], fg=C["muted"], padx=18).pack(anchor="w", pady=(0, 4))
-        for txt in ["d  Dérivées & continuité", "=  Comparaison algos"]:
-            l = tk.Label(nav2, text=txt, font=F["body"],
-                         bg=C["panel"], fg=C["gray"], padx=18, pady=8,
-                         anchor="w", cursor="hand2")
-            l.pack(fill="x")
-            l.bind("<Enter>", lambda e, b=l: b.configure(bg=C["hover"], fg=C["white"]))
-            l.bind("<Leave>", lambda e, b=l: b.configure(bg=C["panel"], fg=C["gray"]))
+
+        outils_items = [
+            ("derivees",    "d  Dérivées & continuité", C["acc_light"]),
+            ("comparaison", "=  Comparaison algos",     C["amber"]),
+        ]
+        for key, text, color in outils_items:
+            row = tk.Frame(nav2, bg=C["panel"], cursor="hand2")
+            row.pack(fill="x")
+            lbl = tk.Label(row, text=text, font=F["body"],
+                           bg=C["panel"], fg=C["gray"],
+                           padx=18, pady=8, anchor="w")
+            lbl.pack(fill="x")
+            for w in [row, lbl]:
+                w.bind("<Button-1>", lambda e, k=key: self._switch(k))
+                w.bind("<Enter>",  lambda e, r=row, l=lbl: [
+                    r.configure(bg=C["hover"]),
+                    l.configure(bg=C["hover"], fg=C["white"])])
+                w.bind("<Leave>",  lambda e, k=key, r=row, l=lbl:
+                       self._outil_leave(k, r, l))
+            self._nav_btns[key] = (row, lbl, lbl, color)
 
         # ── Zone principale ──
         self._main = tk.Frame(self, bg=C["bg"])
         self._main.pack(side="left", fill="both", expand=True)
         self._frames = {
-            "axe1": Axe1Frame(self._main),
-            "axe2": Axe2Frame(self._main),
-            "axe3": Axe3Frame(self._main),
+            "axe1":        Axe1Frame(self._main),
+            "axe2":        Axe2Frame(self._main),
+            "axe3":        Axe3Frame(self._main),
+            "derivees":    DeriveesFrame(self._main),
+            "comparaison": ComparaisonFrame(self._main),
         }
         self._current = None
         self._switch("axe1")
 
-    # ──────────────────────────────────────────
     def _switch(self, key):
         if self._current:
             self._frames[self._current].pack_forget()
         self._frames[key].pack(fill="both", expand=True)
         self._current = key
-        for k, (row, dot, lbl, color) in self._nav_btns.items():
+        for k, items in self._nav_btns.items():
+            row, dot, lbl, color = items
             if k == key:
                 row.configure(bg=C["hover"])
                 dot.configure(bg=C["hover"])
@@ -108,6 +125,14 @@ class App(tk.Tk):
         else:
             row.configure(bg=C["panel"])
             dot.configure(bg=C["panel"])
+            lbl.configure(bg=C["panel"], fg=C["gray"])
+
+    def _outil_leave(self, key, row, lbl):
+        if self._current == key:
+            row.configure(bg=C["hover"])
+            lbl.configure(bg=C["hover"], fg=C["white"])
+        else:
+            row.configure(bg=C["panel"])
             lbl.configure(bg=C["panel"], fg=C["gray"])
 
 

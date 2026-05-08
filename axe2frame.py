@@ -577,7 +577,7 @@ class Axe2Frame(tk.Frame):
 
         x_sol = np.asarray(x_sol, dtype=float)
 
-        if x_sol.ndim == 0:
+        if x_sol.ndim == 0:#si la dimension est 0 = scaller 
           x_sol = np.array([x_sol])
 
         residual = np.linalg.norm(A @ x_sol - b)
