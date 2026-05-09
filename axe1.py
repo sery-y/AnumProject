@@ -656,67 +656,64 @@ def comparer_methodes(
 
     if dicho_ok and dicho_iter is not None:
         methods.append(("Dichotomie", dicho_iter, sol_dicho, 'mx'))
+    
 
-    #  Vérification : aucune méthode valide
     n = len(methods)
     if n == 0:
         print("Aucune méthode valide à afficher.")
         return
 
-    # Vérification : f(xs) peut contenir des NaN/inf
-    ys = f(xs)
-    ys_finite = ys[np.isfinite(ys)]
-    if len(ys_finite) == 0:
-        print("f(x) ne produit aucune valeur finie sur [a, b].")
-        return
-
-    y_max = float(np.max(ys_finite))
-    y_min = float(np.min(ys_finite))
-
-    # ─── Graphes ───────────────────────────────────────────
-    fig, axs = plt.subplots(1, n, figsize=(6 * n, 5))
+    fig, axs = plt.subplots(1, n, figsize=(6*n, 5))
 
     if n == 1:
         axs = [axs]
 
-    labels_conv = {
-        "Newton":      ("Convergence très rapide", 'lightblue'),
-        "Point Fixe":  ("Convergence rapide",      'lightgreen'),
-        "Dichotomie":  ("Convergence lente",        'lightyellow'),
-    }
-
     for i, (name, iters, sol, style) in enumerate(methods):
 
-        axs[i].plot(xs, ys, label="f(x)")
-        axs[i].axhline(0, color='black', linewidth=0.8)
+        axs[i].plot(xs, f(xs), label="f(x)")
+        axs[i].axhline(0, color='black')
 
         if iters:
-            #  Filtrer les itérations hors de [a, b]
-            iters_valid = [v for v in iters if a <= v <= b]
-            if iters_valid:
-                axs[i].plot(iters_valid, [f(v) for v in iters_valid],
-                            style, label="Itérations")
+            axs[i].plot(iters, [f(v) for v in iters],
+                        style, label="Iterations")
+
 
         axs[i].set_title(name)
         axs[i].grid(True)
         axs[i].legend()
 
-        # Annotation de convergence
-        label_txt, color = labels_conv.get(name, ("", 'white'))
-        axs[i].text(
-            a, y_max,
-            label_txt,
-            bbox=dict(facecolor=color, alpha=0.5),
-            fontsize=9,
-            verticalalignment='top'
-        )
+        # ==================================================
+        # compartion  sur les graphes
+
+        if name == "Newton":
+            axs[i].text(
+                a, max(f(xs)),
+                "Convergence tres rapide",
+                bbox=dict(facecolor='lightblue', alpha=0.4)
+            )
+
+        elif name == "Point Fixe":
+            axs[i].text(
+                a, max(f(xs)),
+                "convergence rapide",
+                bbox=dict(facecolor='lightgreen', alpha=0.4)
+            )
+
+        elif name == "Dichotomie":
+            axs[i].text(
+                a, max(f(xs)),
+                "convergence lente",
+                bbox=dict(facecolor='lightyellow', alpha=0.4)
+            )
 
     plt.tight_layout()
     plt.show()
 
-    # ─── Tableau comparatif ────────────────────────────────
+    # Tableau comparatif des méthodes
     data = []
+
     for name, iters, sol, _ in methods:
+
         data.append([
             name,
             len(iters) - 1 if iters else 0,
@@ -724,39 +721,49 @@ def comparer_methodes(
             "Convergence OK"
         ])
 
-    fig2 = plt.figure(figsize=(8, 3))
+    # Affichage du tableau avec matplotlib
+    fig = plt.figure(figsize=(8, 3))
     plt.axis('off')
+
     plt.table(
         cellText=data,
         colLabels=["Méthode", "Itérations", "Solution", "État"],
         cellLoc='center',
         loc='center'
     )
-    plt.title("Comparaison des méthodes numériques")
+
+    plt.title(" Comparaison des méthodes numériques")
     plt.show()
 
-    # ─── Recommandation finale ─────────────────────────────
+
+
+    # Recommandation finale globale
+    
+
+
+
+
     resultats = []
     if newton_ok and newton_iter:
-        resultats.append(("Newton",      len(newton_iter) - 1, sol_newton, "quadratique"))
+        resultats.append(("Newton", len(newton_iter) - 1, sol_newton,"quadratique"))
     if pf_ok and pf_iter:
-        resultats.append(("Point Fixe",  len(pf_iter) - 1,     sol_pf,     "linéaire"))
+        resultats.append(("Point Fixe", len(pf_iter) - 1,sol_pf,"lineare"))
     if dicho_ok and dicho_iter:
-        resultats.append(("Dichotomie",  len(dicho_iter),       sol_dicho,  "linéaire"))
+        resultats.append(("Dichotomie", len(dicho_iter), sol_dicho,"lineare"))
 
+    # Classement par nb itérations
     if len(resultats) > 1:
         classement = sorted(resultats, key=lambda r: r[1])
-        print("\n  Classement (du plus rapide au plus lent) :")
+        print(f"\n  Classement (du plus rapide au plus lent) :")
         for rang, (nom, nit, _, _) in enumerate(classement, 1):
             print(f"    {rang}. {nom:<14}  ({nit} itérations)")
-
-    # Recommandation basée sur la méthode la plus rapide présente
+    
     if newton_ok:
-        print("\n Newton est la méthode la plus rapide (convergence quadratique).")
+        print("Newton est la méthode la plus vite .")
     elif pf_ok:
-        print("\n Point Fixe converge plus rapidement que Dichotomie.")
+        print("Point Fixe fonctionne rapidement que dichotomoie.")
     elif dicho_ok:
-        print("\n Dichotomie est la plus sûre mais converge lentement.")
+        print("Dichotomie est la plus sûre mais lente.")
 
 # Calculer ordre
 def calculer_ordre_point_fixe(phi_expr, solution):
