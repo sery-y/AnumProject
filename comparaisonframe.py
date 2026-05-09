@@ -1,6 +1,7 @@
 
 import tkinter as tk
 from tkinter import ttk, messagebox
+from matplotlib import pyplot as plt
 import numpy as np
 import sympy as sp
 from matplotlib.figure import Figure
@@ -268,6 +269,7 @@ class ComparaisonFrame(tk.Frame):
       except ValueError as e:
         messagebox.showerror("Erreur", str(e))
         return
+      plt.close('all')
       comparer_nonlin(f_str, a, b, tol)
     
     def _run_lineaire(self):
@@ -286,4 +288,5 @@ class ComparaisonFrame(tk.Frame):
         except ValueError:
             p_val = 3
       x0 = np.zeros(len(b))
+      plt.close('all')
       comparer_lineaire(A, b, x0, nmax, tol, norm_type, p_val)

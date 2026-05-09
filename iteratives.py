@@ -151,37 +151,37 @@ def comparer_methodes(A, b, x0, max_iter=100, epsilon=1e-6, type_norme=2, p_norm
     err_gs = float(np.linalg.norm(A @ X_gs - b)) if conv_gs else float('inf')
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-    fig.patch.set_facecolor('#1a1a2e')
+    fig.patch.set_facecolor('white')
 
     # ── Graphe convergence ──
     ax1 = axes[0]
-    ax1.set_facecolor('#0f0f1a')
+    ax1.set_facecolor('white')
     if errs_j and len(errs_j) > 1:
-        ax1.semilogy(range(len(errs_j)), [max(e, 1e-16) for e in errs_j],
+        ax1.semilogy(range(1, len(errs_j)+1), [max(e, 1e-16) for e in errs_j],
                      color='#4fc3f7', lw=2, marker='o', markersize=3, label='Jacobi')
     if errs_gs and len(errs_gs) > 1:
-        ax1.semilogy(range(len(errs_gs)), [max(e, 1e-16) for e in errs_gs],
+        ax1.semilogy(range(1, len(errs_gs)+1), [max(e, 1e-16) for e in errs_gs],
                      color='#80cbc4', lw=2, marker='^', markersize=3, label='Gauss-Seidel')
-    ax1.set_title("Convergence des erreurs", color='white', fontsize=11)
-    ax1.set_xlabel("Itération", color='gray', fontsize=9)
-    ax1.set_ylabel("Erreur estimée", color='gray', fontsize=9)
-    ax1.tick_params(colors='gray', labelsize=8)
+    ax1.set_title("Convergence des erreurs", color='black', fontsize=11)
+    ax1.set_xlabel("Itération", color='black', fontsize=9)
+    ax1.set_ylabel("Erreur estimée", color='black', fontsize=9)
+    ax1.tick_params(colors='black', labelsize=8)
     for s in ax1.spines.values():
-        s.set_edgecolor('#333')
-    ax1.legend(facecolor='#1a1a2e', edgecolor='#333',
-               labelcolor='white', fontsize=9)
+        s.set_edgecolor('black')
+    ax1.legend(facecolor='white', edgecolor='black',
+               labelcolor='black', fontsize=9)
 
     # ── Tableau ──
     ax2 = axes[1]
     ax2.axis('off')
     data = [
         ['Jacobi',
-         '✓' if conv_j else '✗',
+         'Oui' if conv_j else 'Non',
          str(len(hist_j)),
          f'{err_j:.2e}',
          f'{p_j:.4f}'],
         ['Gauss-Seidel',
-         '✓' if conv_gs else '✗',
+         'Oui' if conv_gs else 'Non',
          str(len(hist_gs)),
          f'{err_gs:.2e}',
          f'{p_gs:.4f}'],
@@ -197,10 +197,10 @@ def comparer_methodes(A, b, x0, max_iter=100, epsilon=1e-6, type_norme=2, p_norm
             cell.set_facecolor('#4472C4')
             cell.set_text_props(color='white', fontweight='bold')
         else:
-            cell.set_facecolor('#1e1e2e')
-            cell.set_text_props(color='white')
-        cell.set_edgecolor('#333')
-    ax2.set_title("Résumé de la comparaison", color='white', fontsize=11)
+            cell.set_facecolor('white')
+            cell.set_text_props(color='black')
+        cell.set_edgecolor('black')
+    ax2.set_title("Résumé de la comparaison", color='black', fontsize=11)
 
     plt.tight_layout()
     plt.show()

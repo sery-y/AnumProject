@@ -12,6 +12,8 @@ from interfacePartagee import C, F, Card, StatCard, mk_entry, mk_btn, configure_
 from directes import choleski, resoudre_choleski, LU, resoudre_LU, gauss, recommander_methodes_directes
 from iteratives import recommander_methodes, analyser_matrice, jacobi, gauss_seidel, visualiser_convergence, visualiser_solution
 from matrices import *
+
+TAILLE_MAX = 8
 # ══════════════════════════════════════════════
 #  ALGORITHMES NUMÉRIQUES DIRECTS
 # ══════════════════════════════════════════════
@@ -47,6 +49,7 @@ def decomp_cholesky(A, b):
 
 class Axe2Frame(tk.Frame):
     def __init__(self, parent):
+        
         super().__init__(parent, bg=C["bg"])
         self._result_data = []
         self._n = 3
@@ -189,7 +192,7 @@ class Axe2Frame(tk.Frame):
         tk.Label(sz_row, text="n =", font=F["small"],
                  bg=C["card"], fg=C["gray"]).pack(side="left")
         self._n_var = tk.IntVar(value=3)
-        for n in [2, 3, 4, 5]:
+        for n in range(2, TAILLE_MAX + 1):
             tk.Radiobutton(sz_row, text=str(n), variable=self._n_var, value=n,
                            font=F["body"], bg=C["card"], fg=C["white"],
                            activebackground=C["card"], activeforeground=C["acc_light"],
@@ -726,7 +729,7 @@ class Axe2Frame(tk.Frame):
             cols = ("n", "operation")
             tree = ttk.Treeview(self._tree_frame, columns=cols,
                                 show="headings", height=6, style="D.Treeview")
-            tree.heading("n", text="#")
+            tree.heading("n", text="numéro itération")
             tree.column("n", width=45, anchor="center")
             tree.heading("operation", text="Opération effectuée")
             tree.column("operation", width=600, anchor="w")
