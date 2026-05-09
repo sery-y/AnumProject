@@ -168,9 +168,15 @@ class Axe2Frame(tk.Frame):
         self._lbl_cond  = tk.Label(extra_row, text="cond(A) = —",
                                    font=F["mono"], bg=C["card"], fg=C["gray"])
         self._lbl_cond.pack(side="left", padx=(0, 20))
+    
         self._lbl_rho_a = tk.Label(extra_row, text="ρ(A) = —",
                                    font=F["mono"], bg=C["card"], fg=C["gray"])
         self._lbl_rho_a.pack(side="left")
+
+        self._lbl_norm_a = tk.Label(extra_row, text="",
+                            font=F["mono"], bg=C["card"], fg=C["gray"])
+        self._lbl_norm_a.pack(side="left", padx=(20, 0))
+        self._lbl_norm_a.pack_forget()
 
         # ── Recommandation ──
         rec = tk.Frame(self._content, bg=C["teal_bg"],
@@ -370,8 +376,11 @@ class Axe2Frame(tk.Frame):
             return
         if name == "Itérative":
             self._iter_param_card.pack(fill="x", padx=28, pady=8, after=self._mat_card)
+            self._lbl_norm_a.configure(text="‖A‖ = —")
+            self._lbl_norm_a.pack(side="left", padx=(20, 0))
         else:
             self._iter_param_card.pack_forget()
+            self._lbl_norm_a.pack_forget()
 
     def _sel_algo(self, name):
         self._algo_var.set(name)
@@ -489,10 +498,26 @@ class Axe2Frame(tk.Frame):
     
       try:
         rho_a = rayon_spectral(A)
-        if np.isfinite(rho_a):
-            self._lbl_rho_a.configure(text=f"ρ(A) = {rho_a:.4f}")
-        else:
-            self._lbl_rho_a.configure(text="ρ(A) = ∞")
+        rho_text = f"ρ(A) = {rho_a:.4f}" if np.isfinite(rho_a) else "ρ(A) = ∞"
+        self._lbl_rho_a.configure(text=rho_text)
+        #calcul de norme
+        if self._cat_var.get() == "Itérative":
+          norm_type = self._norm_var.get()
+          p_val = None
+          if norm_type == 3:
+            try:
+                p_val = int(self._p_custom_entry.get())
+            except ValueError:
+                p_val = 3
+          try:
+            norm_val = choisir_norme(A, norm_type, p_val)
+            labels = {1: "‖A‖₁", 2: "‖A‖₂", 0: "‖A‖∞", 3: f"‖A‖{p_val}"}
+            norm_label = labels.get(norm_type, "‖A‖")
+            self._lbl_norm_a.configure(text=f"{norm_label} = {norm_val:.4e}")
+          except Exception:
+            self._lbl_norm_a.configure(text="‖A‖ = erreur")
+       
+
       except Exception:
         self._lbl_rho_a.configure(text="ρ(A) = indéfini")
 
