@@ -141,41 +141,69 @@ def afficher_recommandations(A):
     else:
         print("\nAucune méthode itérative recommandée pour cette matrice.")
 
-def comparer_methodes(A, b, x0, max_iter=100, epsilon=1e-6):
-    
+def comparer_methodes(A, b, x0, max_iter=100, epsilon=1e-6, type_norme=2, p_norm=None):
     print("\n--- Comparaison Jacobi vs Gauss-Seidel ---")
 
-    # Jacobi
-    Js, suite_jacobi, p_j = jacobi(A, b, x0, max_iter, epsilon, visualiser=False)
-    X_j = suite_jacobi[-1]
-    err_j = np.linalg.norm(A @ X_j - b)
+    conv_j, X_j, hist_j, errs_j, p_j, Js, _ = jacobi(A, b, x0, epsilon, max_iter, type_norme, p_norm)
+    conv_gs, X_gs, hist_gs, errs_gs, p_gs, Gs, _ = gauss_seidel(A, b, x0, epsilon, max_iter, type_norme, p_norm)
 
-    # Gauss-Seidel
-    Gs, suite_gs, p_gs = gauss_seidel(A, b, x0, max_iter, epsilon, visualiser=False)
-    X_gs = suite_gs[-1]
-    err_gs = np.linalg.norm(A @ X_gs - b)
+    err_j  = float(np.linalg.norm(A @ X_j  - b)) if conv_j  else float('inf')
+    err_gs = float(np.linalg.norm(A @ X_gs - b)) if conv_gs else float('inf')
 
-    print("\n--- Résultats ---")
-    print(f"Jacobi : p = {p_j}, erreur = {err_j}")
-    print(f"Gauss-Seidel : p = {p_gs}, erreur = {err_gs}")
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    fig.patch.set_facecolor('#1a1a2e')
 
-    # Comparaison vitesse
-    if p_j < p_gs:
-        print("Jacobi converge plus rapidement (p plus petit)")
-    else:
-        print("Gauss-Seidel converge plus rapidement")
+    # ── Graphe convergence ──
+    ax1 = axes[0]
+    ax1.set_facecolor('#0f0f1a')
+    if errs_j and len(errs_j) > 1:
+        ax1.semilogy(range(len(errs_j)), [max(e, 1e-16) for e in errs_j],
+                     color='#4fc3f7', lw=2, marker='o', markersize=3, label='Jacobi')
+    if errs_gs and len(errs_gs) > 1:
+        ax1.semilogy(range(len(errs_gs)), [max(e, 1e-16) for e in errs_gs],
+                     color='#80cbc4', lw=2, marker='^', markersize=3, label='Gauss-Seidel')
+    ax1.set_title("Convergence des erreurs", color='white', fontsize=11)
+    ax1.set_xlabel("Itération", color='gray', fontsize=9)
+    ax1.set_ylabel("Erreur estimée", color='gray', fontsize=9)
+    ax1.tick_params(colors='gray', labelsize=8)
+    for s in ax1.spines.values():
+        s.set_edgecolor('#333')
+    ax1.legend(facecolor='#1a1a2e', edgecolor='#333',
+               labelcolor='white', fontsize=9)
 
-    # Comparaison précision
-    if err_j < err_gs:
-        print("Jacobi est plus précis")
-    else:
-        print("Gauss-Seidel est plus précis")
+    # ── Tableau ──
+    ax2 = axes[1]
+    ax2.axis('off')
+    data = [
+        ['Jacobi',
+         '✓' if conv_j else '✗',
+         str(len(hist_j)),
+         f'{err_j:.2e}',
+         f'{p_j:.4f}'],
+        ['Gauss-Seidel',
+         '✓' if conv_gs else '✗',
+         str(len(hist_gs)),
+         f'{err_gs:.2e}',
+         f'{p_gs:.4f}'],
+    ]
+    headers = ['Méthode', 'Convergé', 'Itérations', 'Résidu ‖Ax-b‖', 'ρ spectral']
+    table = ax2.table(cellText=data, colLabels=headers,
+                      loc='center', cellLoc='center')
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    table.scale(1.2, 2)
+    for (r, c), cell in table.get_celld().items():
+        if r == 0:
+            cell.set_facecolor('#4472C4')
+            cell.set_text_props(color='white', fontweight='bold')
+        else:
+            cell.set_facecolor('#1e1e2e')
+            cell.set_text_props(color='white')
+        cell.set_edgecolor('#333')
+    ax2.set_title("Résumé de la comparaison", color='white', fontsize=11)
 
-    # Recommandation finale
-    if err_j < err_gs and p_j <= p_gs:
-        print("\n Méthode recommandée : Jacobi")
-    else:
-        print("\n Méthode recommandée : Gauss-Seidel")
+    plt.tight_layout()
+    plt.show()
 
 def visualiser_convergence(suite_iterative, titre="Convergence", methode="Jacobi"):
     # Calculer l'erreur relative entre itérations successives

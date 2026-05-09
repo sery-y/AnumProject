@@ -18,7 +18,7 @@ from interfacePartagee import C, F, Card, StatCard, mk_entry, mk_btn
 # ══════════════════════════════════════════════
 #  IMPORT DES FONCTIONS DU MODULE AXE3
 # ══════════════════════════════════════════════
-from approximation import (
+from axe3 import (
     evaluer_polynome,
     norme_discrete,
 

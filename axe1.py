@@ -627,54 +627,56 @@ def trace_courbe(f_expr, iterations, solution,a,b,titre):
     plt.grid(True)
     plt.legend()
     plt.show()
-def comparer_methodes(f_expr,newton_iter, pf_iter, dicho_iter,sol_newton, sol_pf,sol_dicho,a,b):
-    x = sp.Symbol('x')
-    f = sp.lambdify(x, f_expr, 'numpy')
 
-    x = np.linspace(a, b, 500)
-    
-
-    fig, axs = plt.subplots(1,3, figsize=(18,5))
+def comparer_methodes(f_expr, a, b, tol, nmax=500):
+    x_sym = sp.Symbol('x')
+    f_sym = sp.sympify(f_expr)
+    f = sp.lambdify(x_sym, f_sym, 'numpy')
+    x0 = (a + b) / 2
 
     # Newton
-    axs[0].plot(x, f(x))
-    axs[0].axhline(0,color='black')
-    axs[0].plot(newton_iter,
-                [f(v) for v in newton_iter],
-                'bx')
-    axs[0].plot(sol_newton, f(sol_newton), 'ro')
-    axs[0].set_title("Newton")
+    try:
+        ok_n, sol_n, iters_n, *_ = newton_(f_expr, a, b, x0, tol, nmax)
+    except Exception:
+        ok_n, sol_n, iters_n = False, None, []
 
-    # -Point fixe
-    axs[1].plot(x, f(x))
-    axs[1].axhline(0,color='black')
-    axs[1].plot(pf_iter,
-                [f(v) for v in pf_iter],
-                'gx')
-    axs[1].plot(sol_pf, f(sol_pf), 'ro')
-    axs[1].set_title("Point Fixe")
+    # Dichotomie
+    try:
+        ok_d, sol_d, iters_d, _ = dichotomie(f_expr, a, b, tol, nmax)
+    except Exception:
+        ok_d, sol_d, iters_d = False, None, []
 
-    # DICHOTOMIE
-    axs[2].plot(x, f(x))
-    axs[2].axhline(0,color='black')
-    axs[2].plot(dicho_iter,
-                [f(v) for v in dicho_iter],
-                'mx')
-    axs[2].plot(sol_dicho, f(sol_dicho), 'ro')
-    axs[2].set_title("Dichotomie")
+    # Point fixe
+    try:
+        ok_pf, _, sol_pf, iters_pf, _, _ = point_fixe(f_expr, a, b, x0, tol, nmax)
+    except Exception:
+        ok_pf, sol_pf, iters_pf = False, None, []
 
-    for ax in axs:
+    x_vals = np.linspace(a, b, 500)
+
+    fig, axs = plt.subplots(1, 3, figsize=(18, 5))
+
+    for ax, iters, sol, titre, color in [
+        (axs[0], iters_n,  sol_n,  "Newton",     'b'),
+        (axs[1], iters_pf, sol_pf, "Point Fixe", 'g'),
+        (axs[2], iters_d,  sol_d,  "Dichotomie", 'm'),
+    ]:
+        ax.plot(x_vals, f(x_vals))
+        ax.axhline(0, color='black')
+        if iters:
+            ax.plot(iters, [float(f(v)) for v in iters], color + 'x')
+        if sol is not None:
+            ax.plot(sol, float(f(sol)), 'ro')
+        ax.set_title(titre)
         ax.grid(True)
 
     plt.tight_layout()
     plt.show()
 
-    print("\n recomnation")
-
-    print("Newton rapide mais pas toujours efficace")
-    print("Point fixe simple mais dépend de phi(x)")
-    print("Dichotomie lente mais toujours stable")
-
+    print("\nRecommandation :")
+    print("Newton : rapide mais nécessite f dérivable et bon x0")
+    print("Point fixe : simple mais dépend de phi(x)")
+    print("Dichotomie : lente mais toujours stable")
 
 # Calculer ordre
 def calculer_ordre_point_fixe(phi_expr, solution):
