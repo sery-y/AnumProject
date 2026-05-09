@@ -13,7 +13,7 @@ from iteratives import comparer_methodes as comparer_lineaire
 
 
 
-
+TAILLE_MAX = 8
 
 class ComparaisonFrame(tk.Frame):
     def __init__(self, parent):
@@ -93,7 +93,7 @@ class ComparaisonFrame(tk.Frame):
         tk.Label(sz_row, text="n =", font=F["small"],
                  bg=C["card"], fg=C["gray"]).pack(side="left")
         self._lin_n_var = tk.IntVar(value=3)
-        for n in [2, 3, 4]:
+        for n in range(2, TAILLE_MAX + 1):
             tk.Radiobutton(sz_row, text=str(n), variable=self._lin_n_var, value=n,
                            font=F["body"], bg=C["card"], fg=C["white"],
                            activebackground=C["card"], activeforeground=C["acc_light"],

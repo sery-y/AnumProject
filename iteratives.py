@@ -146,7 +146,9 @@ def comparer_methodes(A, b, x0, max_iter=100, epsilon=1e-6, type_norme=2, p_norm
 
     conv_j, X_j, hist_j, errs_j, p_j, Js, _ = jacobi(A, b, x0, epsilon, max_iter, type_norme, p_norm)
     conv_gs, X_gs, hist_gs, errs_gs, p_gs, Gs, _ = gauss_seidel(A, b, x0, epsilon, max_iter, type_norme, p_norm)
-
+    iter_j  = len(hist_j)
+    iter_gs = len(hist_gs)
+    
     err_j  = float(np.linalg.norm(A @ X_j  - b)) if conv_j  else float('inf')
     err_gs = float(np.linalg.norm(A @ X_gs - b)) if conv_gs else float('inf')
 
@@ -157,10 +159,10 @@ def comparer_methodes(A, b, x0, max_iter=100, epsilon=1e-6, type_norme=2, p_norm
     ax1 = axes[0]
     ax1.set_facecolor('white')
     if errs_j and len(errs_j) > 1:
-        ax1.semilogy(range(1, len(errs_j)+1), [max(e, 1e-16) for e in errs_j],
+        ax1.semilogy(range( 1,len(errs_j)+1), [max(e, 1e-16) for e in errs_j],
                      color='#4fc3f7', lw=2, marker='o', markersize=3, label='Jacobi')
     if errs_gs and len(errs_gs) > 1:
-        ax1.semilogy(range(1, len(errs_gs)+1), [max(e, 1e-16) for e in errs_gs],
+        ax1.semilogy(range( 1,len(errs_gs)+1), [max(e, 1e-16) for e in errs_gs],
                      color='#80cbc4', lw=2, marker='^', markersize=3, label='Gauss-Seidel')
     ax1.set_title("Convergence des erreurs", color='black', fontsize=11)
     ax1.set_xlabel("Itération", color='black', fontsize=9)
@@ -175,16 +177,8 @@ def comparer_methodes(A, b, x0, max_iter=100, epsilon=1e-6, type_norme=2, p_norm
     ax2 = axes[1]
     ax2.axis('off')
     data = [
-        ['Jacobi',
-         'Oui' if conv_j else 'Non',
-         str(len(hist_j)),
-         f'{err_j:.2e}',
-         f'{p_j:.4f}'],
-        ['Gauss-Seidel',
-         'Oui' if conv_gs else 'Non',
-         str(len(hist_gs)),
-         f'{err_gs:.2e}',
-         f'{p_gs:.4f}'],
+        ['Jacobi', 'Oui' if conv_j else 'Non', str(iter_j), f'{err_j:.2e}', f'{p_j:.4f}'],
+        ['Gauss-Seidel', 'Oui' if conv_gs else 'Non', str(iter_gs), f'{err_gs:.2e}', f'{p_gs:.4f}'],
     ]
     headers = ['Méthode', 'Convergé', 'Itérations', 'Résidu ‖Ax-b‖', 'ρ spectral']
     table = ax2.table(cellText=data, colLabels=headers,
@@ -202,7 +196,57 @@ def comparer_methodes(A, b, x0, max_iter=100, epsilon=1e-6, type_norme=2, p_norm
         cell.set_edgecolor('black')
     ax2.set_title("Résumé de la comparaison", color='black', fontsize=11)
 
+    #REMARQUE :
+    fig.subplots_adjust(bottom=0.25)  # 
+    remarques = []
+    
+    # Comparaison de vitesse
+    if iter_gs < iter_j:
+        rapport = iter_j / iter_gs
+        remarques.append(f"• Gauss-Seidel est {rapport:.1f}x plus rapide que Jacobi ({iter_gs} vs {iter_j} itérations)")
+    elif iter_j < iter_gs:
+        rapport = iter_gs / iter_j
+        remarques.append(f"• Jacobi est {rapport:.1f}x plus rapide que Gauss-Seidel ({iter_j} vs {iter_gs} itérations)")
+    else:
+        remarques.append(f"• Les deux méthodes convergent en {iter_j} itérations")
+    
+    # Comparaison des rayons spectraux
+    if p_gs < p_j:
+        rapport_rho = p_j / p_gs
+        remarques.append(f"• Rayon spectral de GS ({p_gs:.4f}) est {rapport_rho:.1f}x plus petit que celui de Jacobi ({p_j:.4f}) → convergence plus rapide")
+    elif p_j < p_gs:
+        rapport_rho = p_gs / p_j
+        remarques.append(f"• Rayon spectral de Jacobi ({p_j:.4f}) est {rapport_rho:.1f}x plus petit que celui de GS ({p_gs:.4f})")
+    else:
+        remarques.append(f"• Rayons spectraux identiques : {p_j:.4f}")
+    
+    # Comparaison des résidus
+    if err_gs < err_j:
+        rapport_err = err_j / err_gs
+        remarques.append(f"• GS donne un résidu {rapport_err:.1f}x plus petit que Jacobi ({err_gs:.2e} vs {err_j:.2e})")
+    elif err_j < err_gs:
+        rapport_err = err_gs / err_j
+        remarques.append(f"• Jacobi donne un résidu {rapport_err:.1f}x plus petit que GS ({err_j:.2e} vs {err_gs:.2e})")
+    else:
+        remarques.append(f"• Résidus identiques : {err_j:.2e}")
+    
+    # Recommandation finale
+    if iter_gs < iter_j and err_gs < err_j:
+        remarques.append("Conclusion : Gauss-Seidel est RECOMMANDÉ pour cette matrice")
+    elif iter_j < iter_gs and err_j < err_gs:
+        remarques.append("Conclusion : Jacobi est RECOMMANDÉ pour cette matrice")
+    else:
+        remarques.append("⚠️ Les deux méthodes sont comparables, à vous de choisir")
+    
+    # Affichage des remarques
+    text_remarks = "\n".join(remarques)
+    ax2.text(0.5, 0.2, text_remarks, transform=ax2.transAxes, fontsize=9, color='black',
+             verticalalignment='top', horizontalalignment='center',
+             bbox=dict(boxstyle="round,pad=0.5", facecolor='#f0f0f0', edgecolor='black'))
+    
+    ax2.set_title("Résumé de la comparaison", color='black', fontsize=12)
     plt.tight_layout()
+    plt.subplots_adjust(bottom=0.15)
     plt.show()
 
 def visualiser_convergence(suite_iterative, titre="Convergence", methode="Jacobi"):

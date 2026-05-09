@@ -200,12 +200,25 @@ class DeriveesFrame(tk.Frame):
         self._sym_labels["lim_inf"].configure(text="indéterminée")
         self._sym_labels["lim_sup"].configure(text="indéterminée")
 
+      # ── Zéros de f' (pour tableau de variation uniquement) ──
+      try:
+        crits = sp.solve(fp_sym, x)
+        crits_real = [c for c in crits if sp.im(c) == 0]
+        crits_in   = [c for c in crits_real if a <= float(c.evalf()) <= b]
+      except Exception:
+        crits_in = []
+
     # ── Continuité ──
       try:
         f_num = sp.lambdify(x, f_sym, 'numpy')
         xs_test = np.linspace(a, b, 500)
         ys_test = f_num(xs_test)
         is_cont = np.all(np.isfinite(ys_test))
+        sing = sp.singularities(f_sym, x)
+        sing_in = [s for s in sing
+           if sp.im(s) == 0 and a <= float(s.evalf()) <= b]
+        if sing_in:
+          is_cont = False
         self._cont_labels["continuite"].configure(
             text=" Oui" if is_cont else " Non",
             fg=C["teal"] if is_cont else C["red"])
@@ -213,6 +226,7 @@ class DeriveesFrame(tk.Frame):
         self._cont_labels["continuite"].configure(text="? Indéterminé", fg=C["muted"])
 
     # ── Dérivabilité ──
+    #verification de f prime finie
       try:
         fp_num = sp.lambdify(x, fp_sym, 'numpy')
         ys_fp  = fp_num(xs_test)
@@ -220,7 +234,33 @@ class DeriveesFrame(tk.Frame):
         self._cont_labels["derivable"].configure(
             text=" Oui" if is_der else " Non",
             fg=C["teal"] if is_der else C["red"])
-      except Exception:
+        #verification si f admet des points de discontinuité( ou f n est pas definie) pas continue-> pas derivable !
+        try:
+          sing = sp.singularities(f_sym, x)
+          sing_in = [s for s in sing 
+                   if sp.im(s) == 0 and a <= float(s.evalf()) <= b]
+          if sing_in:
+            is_der = False
+        except Exception:
+           pass
+        #calculer la derivee gauche et droite dans les points critique 0 et extremités
+        points_to_check = crits_in + [sp.Float(a), sp.Float(b)]
+        for pt in points_to_check:
+          try:
+            lim_g = sp.limit(fp_sym, x, pt, '-')
+            lim_d = sp.limit(fp_sym, x, pt, '+')
+            if lim_g in (sp.oo, -sp.oo) or lim_d in (sp.oo, -sp.oo): #si les limite sont infinies pas derivable
+              is_der = False
+            elif sp.simplify(lim_g - lim_d) != 0:
+                is_der = False
+          except Exception:
+            pass
+
+        self._cont_labels["derivable"].configure(
+          text=" Oui" if is_der else " Non",
+          fg=C["teal"] if is_der else C["red"])
+      except Exception as e:
+        print(f"Erreur dérivabilité : {type(e).__name__}: {e}")
         self._cont_labels["derivable"].configure(text="? Indéterminé", fg=C["muted"])
 
     # ── Zéros de f ──
@@ -234,13 +274,7 @@ class DeriveesFrame(tk.Frame):
         zeros_in = []
         self._pts_labels["zeros"].configure(text="Non calculable")
 
-    # ── Zéros de f' (pour tableau de variation uniquement) ──
-      try:
-        crits = sp.solve(fp_sym, x)
-        crits_real = [c for c in crits if sp.im(c) == 0]
-        crits_in   = [c for c in crits_real if a <= float(c.evalf()) <= b]
-      except Exception:
-        crits_in = []
+    
 
     # ── Tableau de variation ──
       self._draw_variation_table(f_sym, fp_sym, a, b, crits_in)
