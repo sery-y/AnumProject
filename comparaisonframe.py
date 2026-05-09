@@ -10,7 +10,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from interfacePartagee import C, F, Card, mk_entry, mk_btn, configure_treeview_style
 from axe1 import comparer_methodes as comparer_nonlin
 from iteratives import comparer_methodes as comparer_lineaire
-
+from axe1 import dichotomie, newton_, point_fixe, point_fixe_avec_phi
 
 
 TAILLE_MAX = 8
@@ -270,8 +270,46 @@ class ComparaisonFrame(tk.Frame):
         messagebox.showerror("Erreur", str(e))
         return
       plt.close('all')
-      comparer_nonlin(f_str, a, b, tol)
-    
+
+      # --- Exécuter les méthodes et récupérer les résultats ---
+      newton_iter, sol_newton, newton_ok = None, None, False
+      pf_iter,     sol_pf,     pf_ok     = None, None, False
+      dicho_iter,  sol_dicho,  dicho_ok  = None, None, False
+      try:
+        success, sol_newton, newton_iter, _, _, _, _ = newton_(f_str, a, b, (a+b)/2, tol, 200)
+        if success:
+            newton_ok = True
+      except Exception:
+        pass
+      
+      try:
+        success, _, sol_pf, pf_iter, _, _ = point_fixe(f_str, a, b, (a+b)/2, tol, 200)
+        if success:
+            pf_ok = True
+      except Exception:
+        pass
+      
+      try:
+        success, sol_dicho, dicho_iter, _ = dichotomie(f_str, a, b, tol, 200)
+        if success:
+            dicho_ok = True
+      except Exception:
+        pass
+
+      comparer_nonlin(
+        f_expr      = f_str,
+        newton_iter = newton_iter,
+        pf_iter     = pf_iter,
+        dicho_iter  = dicho_iter,
+        sol_newton  = sol_newton,
+        sol_pf      = sol_pf,
+        sol_dicho   = sol_dicho,
+        a           = a,
+        b           = b,
+        newton_ok   = newton_ok,
+        pf_ok       = pf_ok,
+        dicho_ok    = dicho_ok,
+    )
     def _run_lineaire(self):
       try:
         A, b = self._read_lin_matrix()

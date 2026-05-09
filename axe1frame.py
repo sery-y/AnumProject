@@ -120,7 +120,7 @@ class Axe1Frame(tk.Frame):
         
         # Champ phi (caché par défaut)
         self._phi_col = tk.Frame(row, bg=C["card"])
-        tk.Label(self._phi_col, text="φ(x) =", font=F["small"],
+        tk.Label(self._phi_col, text="φ(x) = (séparer par ;)", font=F["small"],
          bg=C["card"], fg=C["gray"]).pack(anchor="w", pady=(0, 3))
         self.e_phi = mk_entry(self._phi_col, "", 15)
         self.e_phi.pack(ipady=5)
@@ -262,9 +262,14 @@ class Axe1Frame(tk.Frame):
             self._dicho_sol     = sol_d
 
             phi_str = self.e_phi.get().strip().replace('^', '**')
+            
             if phi_str:
+              # parser la liste des phi
+              phi_list = [p.strip() for p in phi_str.split(';') if p.strip()]
+              phi_input = phi_list if len(phi_list) > 1 else phi_list[0]
+
               ok_pf, phi, sol_pf, _, _, _ = point_fixe_avec_phi(
-              f_str, phi_str, a, b, x0, tol, nmax)
+              f_str, phi_input, a, b, x0, tol, nmax)
             else:
               ok_pf, phi, sol_pf, _, _, _ = point_fixe(f_str, a, b, x0, tol, nmax)
 
@@ -334,26 +339,47 @@ class Axe1Frame(tk.Frame):
                 phi_str = self.e_phi.get().strip().replace('^', '**')
 
                 if phi_str:
+                  phi_list = [p.strip() for p in phi_str.split(';') if p.strip()]
+                  phi_input = phi_list if len(phi_list) > 1 else phi_list[0]
                   ok, phi, sol, iters, erreurs, rapport = point_fixe_avec_phi(
-                  f_str, phi_str, a, b, x0, tol, nmax)
+                  f_str, phi_input, a, b, x0, tol, nmax)
                   if not ok:
-                    messagebox.showwarning("Point fixe", "Méthode du point fixe non applicable avec cette phi.")
+                    msg = "Méthode du point fixe non applicable.\n\n"
+                    if rapport:
+                      msg += "Analyse des φ(x) fournies :\n"
+                      for phi_sym, stable, contractant, k in rapport:
+                        msg += f"\n  φ(x) = {phi_sym}\n"
+                        msg += f"    Stable      : {'Oui' if stable else 'Non'}\n"
+                        msg += f"    Contractante: {'Oui' if contractant else 'Non'}"
+                        msg += f"  (k = {k:.4f})\n"
+                    messagebox.showwarning("Point fixe", msg)
                     return
                 else:
                   ok, phi, sol, iters, erreurs, rapport = point_fixe(
                     f_str, a, b, x0, tol, nmax)
                   if not ok:
-                    msg = ("Aucune φ(x) stable et contractante trouvée sur [a,b].\n"
-                           "Point fixe non applicable.\n"
-                           "Voulez-vous essayer avec relaxation / Newton ?")
+           
+                    msg = "Aucune φ(x) stable et contractante trouvée sur [a,b].\n\n"
+                    if rapport:
+                      msg += "Phi générées automatiquement :\n"
+                      for phi_sym, stable, contractant, k in rapport:
+                        msg += f"\n  φ(x) = {phi_sym}\n"
+                        msg += f"    Stable      : {'Oui' if stable else 'Non'}\n"
+                        msg += f"    Contractante: {'Oui' if contractant else 'Non'}"
+                        msg += f"  (k = {k:.4f})\n"
+                    msg += "\nVoulez-vous essayer avec relaxation / Newton ?"
                     if messagebox.askyesno("Point fixe", msg):
-                        ok, phi, sol, iters, erreurs, rapport = \
-                            point_fixe_avec_relaxation(f_str, a, b, x0, tol, nmax)
-                        if not ok:
-                            messagebox.showerror(
-                                "Échec",
-                                "Même avec relaxation/Newton, aucune convergence trouvée.")
+                      ok, phi, sol, iters, erreurs, rapport = \
+                        point_fixe_avec_relaxation(f_str, a, b, x0, tol, nmax)
+                      if not ok:
+                    
+                        msg2 = "Même avec relaxation/Newton, aucune convergence.\n\n"
+                        if rapport:
+                          for phi_sym, stable, contractant, k in rapport:
+                            msg2 += f"  φ = {phi_sym}  stable={stable}  k={k:.4f}\n"
+                        messagebox.showerror("Échec", msg2)
                     return
+                  
                 # pour afficher phi quand je la genere
                 if not phi_str and ok and phi is not None:
                   self.e_phi.delete(0, "end")
