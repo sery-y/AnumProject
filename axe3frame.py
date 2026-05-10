@@ -129,6 +129,7 @@ class Axe3Frame(tk.Frame):
             ("x à évaluer",   "e_xi",  "2.5",            7),
             ("Degré",         "e_deg", "2",               4),
             ("Norme p",       "e_p",   "2",               4),
+            ("Itérations GD",  "e_iter_gd", "3000", 6),
             
         ]:
             col = tk.Frame(row, bg=C["card"])
@@ -222,6 +223,10 @@ class Axe3Frame(tk.Frame):
       is_interpolation = name in ("Lagrange", "Newton diff. div.")
       state = "disabled" if is_interpolation else "normal"
       self.e_deg.configure(state=state)
+
+       # Itérations GD activé uniquement pour Descente gradient
+      is_gradient = name == "Descente gradient"
+      self.e_iter_gd.configure(state="normal" if is_gradient else "disabled")
 
     def _update_recommendation(self, event=None):
         
@@ -330,7 +335,8 @@ class Axe3Frame(tk.Frame):
                           label=f"Approx. continue degré {deg}")
 
         elif method == "Descente gradient":
-            [a0, a1], historique = descente_gradient(xp, yp, taux=0.001, iterations=3000)
+            iter_gd = int(self.e_iter_gd.get()) if self.e_iter_gd.get().strip().isdigit() else 3000
+            [a0, a1], historique = descente_gradient(xp, yp, taux=0.001, iterations=iter_gd)
             coeffs   = [a0, a1]
             P_func   = lambda t: evaluer_polynome(coeffs, t)
             val      = float(evaluer_polynome(coeffs, xi))
@@ -428,7 +434,8 @@ class Axe3Frame(tk.Frame):
                 meilleur_degre = deg
 
             elif method == "Descente gradient":
-                [a0, a1], _ = descente_gradient(xp, yp, taux=0.001, iterations=3000)
+                iter_gd = int(self.e_iter_gd.get()) if self.e_iter_gd.get().strip().isdigit() else 3000
+                [a0, a1], _ = descente_gradient(xp, yp, taux=0.001, iterations=iter_gd)
                 coeffs = [a0, a1]
                 errs   = [abs(e) for e in erreur_discrete(xp, yp, coeffs)]
                 resultats[1] = {
@@ -556,7 +563,8 @@ class Axe3Frame(tk.Frame):
             return
 
         elif method == "Descente gradient":
-            [a0, a1], _ = descente_gradient(xp, yp, taux=0.001, iterations=3000)
+            iter_gd = int(self.e_iter_gd.get()) if self.e_iter_gd.get().strip().isdigit() else 3000
+            [a0, a1], _ = descente_gradient(xp, yp, taux=0.001, iterations=iter_gd)
             errs = [abs(e) for e in erreur_discrete(xp, yp, [a0, a1])]
 
         n1   = norme_discrete(errs, p=1)

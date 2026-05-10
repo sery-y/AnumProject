@@ -108,6 +108,7 @@ class Axe1Frame(tk.Frame):
             ("a",         "e_a",   "", 5),
             ("b",         "e_b",   "", 5),
             ("Tolérance", "e_tol", "", 7),
+            ("N max",        "e_nmax", "200", 5), 
         ]
         for lbl, attr, default, w in fields:
             col = tk.Frame(row, bg=C["card"])
@@ -126,7 +127,7 @@ class Axe1Frame(tk.Frame):
         self.e_phi.pack(ipady=5)
         self._phi_col.pack_forget()
 
-        for attr in ["e_fx", "e_x0", "e_a", "e_b", "e_tol"]:
+        for attr in ["e_fx", "e_x0", "e_a", "e_b", "e_tol", "e_nmax"]:
             getattr(self, attr).bind("<KeyRelease>", self._on_input_change)
 
         col_b = tk.Frame(row, bg=C["card"])
@@ -254,7 +255,7 @@ class Axe1Frame(tk.Frame):
             b     = float(self.e_b.get())
             x0    = float(self.e_x0.get())
             tol   = float(self.e_tol.get())
-            nmax  = 200
+            nmax = int(self.e_nmax.get()) if self.e_nmax.get().strip().isdigit() else 200
             self._initialized = True
 
             ok_d, sol_d, _, _ = dichotomie(f_str, a, b, tol, nmax)
@@ -272,6 +273,8 @@ class Axe1Frame(tk.Frame):
               f_str, phi_input, a, b, x0, tol, nmax)
             else:
               ok_pf, phi, sol_pf, _, _, _ = point_fixe(f_str, a, b, x0, tol, nmax)
+              if not ok_pf:
+                ok_pf, phi, sol_pf, _, _, _ = point_fixe_avec_relaxation(f_str, a, b, x0, tol, nmax)
 
             self._pf_success = ok_pf
             self._pf_sol     = sol_pf
@@ -302,7 +305,7 @@ class Axe1Frame(tk.Frame):
             a    = float(self.e_a.get())
             b    = float(self.e_b.get())
             x0   = float(self.e_x0.get())
-            nmax = 200
+            nmax = int(self.e_nmax.get()) if self.e_nmax.get().strip().isdigit() else 200
         except ValueError as e:
             messagebox.showerror("Erreur", f"Paramètre invalide : {e}")
             return
@@ -378,7 +381,9 @@ class Axe1Frame(tk.Frame):
                           for phi_sym, stable, contractant, k in rapport:
                             msg2 += f"  φ = {phi_sym}  stable={stable}  k={k:.4f}\n"
                         messagebox.showerror("Échec", msg2)
-                    return
+                        return
+                    else:
+                      return
                   
                 # pour afficher phi quand je la genere
                 if not phi_str and ok and phi is not None:
