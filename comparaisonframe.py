@@ -13,11 +13,12 @@ from iteratives import comparer_methodes as comparer_lineaire
 from axe1 import dichotomie, newton_, point_fixe, point_fixe_avec_phi
 
 
-TAILLE_MAX = 8
+
 
 class ComparaisonFrame(tk.Frame):
     def __init__(self, parent):
         super().__init__(parent, bg=C["bg"])
+        self._n_var = tk.IntVar(value=3)
         self._build()
 
     def _build(self):
@@ -75,6 +76,7 @@ class ComparaisonFrame(tk.Frame):
             ("b",      "e_nl_b",   "2",              5),
             
             ("Tol",    "e_nl_tol", "1e-6",           8),
+            ("N max",  "e_nl_nmax", "200",            6), 
         ]:
             col = tk.Frame(nl_row, bg=C["card"])
             col.pack(side="left", padx=(0, 10))
@@ -92,16 +94,11 @@ class ComparaisonFrame(tk.Frame):
         sz_row.pack(fill="x", pady=(0, 8))
         tk.Label(sz_row, text="n =", font=F["small"],
                  bg=C["card"], fg=C["gray"]).pack(side="left")
-        self._lin_n_var = tk.IntVar(value=3)
-        for n in range(2, TAILLE_MAX + 1):
-            tk.Radiobutton(sz_row, text=str(n), variable=self._lin_n_var, value=n,
-                           font=F["body"], bg=C["card"], fg=C["white"],
-                           activebackground=C["card"], activeforeground=C["acc_light"],
-                           selectcolor=C["acc_bg"], indicatoron=0,
-                           relief="flat", bd=0, highlightthickness=1,
-                           highlightbackground=C["border"],
-                           cursor="hand2", padx=10, pady=3,
-                           command=self._rebuild_lin_matrix).pack(side="left", padx=4)
+        self._n_entry = mk_entry(sz_row, "3", 5)
+        self._n_entry.pack(side="left", ipady=5)
+        tk.Label(sz_row, text="", font=F["small"],
+         bg=C["card"], fg=C["gray"]).pack(side="left", padx=(6, 0))
+        mk_btn(sz_row, "Appliquer", self._apply_size, secondary=True).pack(side="left", padx=(10, 0))
 
         self._lin_mat_frame = tk.Frame(lin_body, bg=C["card"])
         self._lin_mat_frame.pack(fill="x")
@@ -188,6 +185,18 @@ class ComparaisonFrame(tk.Frame):
             self._p_custom_col.pack(anchor="w", pady=(4, 0))
         else:
             self._p_custom_col.pack_forget()
+    
+    def _apply_size(self):
+      try:
+        n = int(self._n_entry.get())
+        if n < 1:
+            messagebox.showwarning("Taille", "n doit être ≥ 1.")
+            return
+      except ValueError:
+        messagebox.showerror("Erreur", "Entrez un entier valide.")
+        return
+      self._n_var.set(n)
+      self._rebuild_lin_matrix()
 
 
     def _sel_type(self, name):
@@ -209,7 +218,7 @@ class ComparaisonFrame(tk.Frame):
         self._norm_card.pack(fill="x", padx=28, pady=8)
 
     def _rebuild_lin_matrix(self):
-        n = self._lin_n_var.get()
+        n = self._n_var.get()
         for w in self._lin_mat_frame.winfo_children():
             w.destroy()
         self._lin_matrix_entries = []
@@ -245,7 +254,7 @@ class ComparaisonFrame(tk.Frame):
             self._lin_b_entries.append(be)
 
     def _read_lin_matrix(self):
-        n = self._lin_n_var.get()
+        n = self._n_var.get()
         A = np.zeros((n, n))
         b = np.zeros(n)
         for i in range(n):
@@ -266,6 +275,7 @@ class ComparaisonFrame(tk.Frame):
         a   = float(self.e_nl_a.get())
         b   = float(self.e_nl_b.get())
         tol = float(self.e_nl_tol.get())
+        nmax = int(self.e_nl_nmax.get()) if self.e_nl_nmax.get().strip().isdigit() else 200  
       except ValueError as e:
         messagebox.showerror("Erreur", str(e))
         return
@@ -276,25 +286,41 @@ class ComparaisonFrame(tk.Frame):
       pf_iter,     sol_pf,     pf_ok     = None, None, False
       dicho_iter,  sol_dicho,  dicho_ok  = None, None, False
       try:
-        success, sol_newton, newton_iter, _, _, _, _ = newton_(f_str, a, b, (a+b)/2, tol, 200)
+        success, sol_newton, newton_iter, _, _, _, _ = newton_(f_str, a, b, (a+b)/2, tol, nmax)
         if success:
             newton_ok = True
       except Exception:
         pass
       
       try:
-        success, _, sol_pf, pf_iter, _, _ = point_fixe(f_str, a, b, (a+b)/2, tol, 200)
+        success, _, sol_pf, pf_iter, _, _ = point_fixe(f_str, a, b, (a+b)/2, tol, nmax)
         if success:
             pf_ok = True
       except Exception:
         pass
       
       try:
-        success, sol_dicho, dicho_iter, _ = dichotomie(f_str, a, b, tol, 200)
+        success, sol_dicho, dicho_iter, _ = dichotomie(f_str, a, b, tol, nmax)
         if success:
             dicho_ok = True
       except Exception:
         pass
+      
+       # ── Vérification applicabilité ──
+      methodes_non_ok = []
+      if not newton_ok:
+          methodes_non_ok.append("Newton")
+      if not pf_ok:
+          methodes_non_ok.append("Point fixe")
+      if not dicho_ok:
+          methodes_non_ok.append("Dichotomie")
+
+      if methodes_non_ok:
+          msg = "Comparaison impossible — méthode(s) non applicable(s) :\n\n"
+          msg += "\n".join(f"  • {m}" for m in methodes_non_ok)
+          
+          messagebox.showwarning("Méthode non applicable", msg)
+          return
 
       comparer_nonlin(
         f_expr      = f_str,
@@ -326,5 +352,6 @@ class ComparaisonFrame(tk.Frame):
         except ValueError:
             p_val = 3
       x0 = np.zeros(len(b))
+    
       plt.close('all')
       comparer_lineaire(A, b, x0, nmax, tol, norm_type, p_val)

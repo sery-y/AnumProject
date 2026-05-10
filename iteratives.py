@@ -201,14 +201,21 @@ def comparer_methodes(A, b, x0, max_iter=100, epsilon=1e-6, type_norme=2, p_norm
     remarques = []
     
     # Comparaison de vitesse
-    if iter_gs < iter_j:
+    if conv_j and conv_gs:
+      if iter_gs < iter_j:
         rapport = iter_j / iter_gs
         remarques.append(f"• Gauss-Seidel est {rapport:.1f}x plus rapide que Jacobi ({iter_gs} vs {iter_j} itérations)")
-    elif iter_j < iter_gs:
+      elif iter_j < iter_gs:
         rapport = iter_gs / iter_j
         remarques.append(f"• Jacobi est {rapport:.1f}x plus rapide que Gauss-Seidel ({iter_j} vs {iter_gs} itérations)")
-    else:
+      else:
         remarques.append(f"• Les deux méthodes convergent en {iter_j} itérations")
+    elif conv_j and not conv_gs:
+      remarques.append(f"• Seul Jacobi a convergé en {iter_j} itérations")
+    elif conv_gs and not conv_j:
+      remarques.append(f"• Seul Gauss-Seidel a convergé en {iter_gs} itérations")
+    else:
+      remarques.append("• Aucune méthode n'a convergé")
     
     # Comparaison des rayons spectraux
     if p_gs < p_j:

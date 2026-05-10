@@ -13,7 +13,7 @@ from directes import choleski, resoudre_choleski, LU, resoudre_LU, gauss, recomm
 from iteratives import recommander_methodes, analyser_matrice, jacobi, gauss_seidel, visualiser_convergence, visualiser_solution
 from matrices import *
 
-TAILLE_MAX = 8
+
 # ══════════════════════════════════════════════
 #  ALGORITHMES NUMÉRIQUES DIRECTS
 # ══════════════════════════════════════════════
@@ -53,6 +53,7 @@ class Axe2Frame(tk.Frame):
         super().__init__(parent, bg=C["bg"])
         self._result_data = []
         self._n = 3
+        self._n_var = tk.IntVar(value=3)
         self._matrix_entries = []
         self._b_entries = []
         self._x0_entries = []
@@ -197,16 +198,11 @@ class Axe2Frame(tk.Frame):
         sz_row.pack(anchor="w")
         tk.Label(sz_row, text="n =", font=F["small"],
                  bg=C["card"], fg=C["gray"]).pack(side="left")
-        self._n_var = tk.IntVar(value=3)
-        for n in range(2, TAILLE_MAX + 1):
-            tk.Radiobutton(sz_row, text=str(n), variable=self._n_var, value=n,
-                           font=F["body"], bg=C["card"], fg=C["white"],
-                           activebackground=C["card"], activeforeground=C["acc_light"],
-                           selectcolor=C["acc_bg"], indicatoron=0,
-                           relief="flat", bd=0, highlightthickness=1,
-                           highlightbackground=C["border"],
-                           cursor="hand2", padx=12, pady=4,
-                           command=self._rebuild_matrix).pack(side="left", padx=4)
+        self._n_entry = mk_entry(sz_row, "3", 5)
+        self._n_entry.pack(side="left", ipady=5)
+        tk.Label(sz_row, text="", font=F["small"],
+         bg=C["card"], fg=C["gray"]).pack(side="left", padx=(6, 0))
+        mk_btn(sz_row, "Appliquer", self._apply_size, secondary=True).pack(side="left", padx=(10, 0))
 
         # ── Matrice ──
         self._mat_card = Card(self._content, "Matrice A et vecteur b")
@@ -405,6 +401,18 @@ class Axe2Frame(tk.Frame):
           self._p_custom_col.pack(anchor="w", pady=(4, 0))
         else:
           self._p_custom_col.pack_forget()
+
+    def _apply_size(self):
+      try:
+        n = int(self._n_entry.get())
+        if n < 1:
+            messagebox.showwarning("Taille", "n doit être ≥ 1.")
+            return
+      except ValueError:
+        messagebox.showerror("Erreur", "Entrez un entier valide.")
+        return
+      self._n_var.set(n)
+      self._rebuild_matrix()
 
     def _rebuild_matrix(self):
         self._n = self._n_var.get()
